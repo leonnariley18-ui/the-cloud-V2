@@ -1610,6 +1610,7 @@ function RecommenderPage({strains,savedTips,onSaveTip,onDeleteTip}){
 export default function App(){
   const USER_ID="dba87fdb-af33-4f2f-94a6-6ee8e6a5c104";
   const[dataLoaded,setDataLoaded]=useState(false);
+  const[data,setData]=useState({});
   const[synced,setSynced]=useState(true);
   const[page,setPage]=useState("home");
   const[menuOpen,setMenuOpen]=useState(false);
@@ -1676,6 +1677,7 @@ export default function App(){
   const saveToCloud=useCallback(async(newData)=>{
     setSynced(false);
     const{error}=await supabase.from("cloud_data").upsert({user_id:USER_ID,data:newData,updated_at:new Date().toISOString()},{onConflict:"user_id"});
+    console.log("saveToCloud error:", error);
     setSynced(!error);
   },[]);
 
