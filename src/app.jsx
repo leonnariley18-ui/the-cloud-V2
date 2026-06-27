@@ -271,6 +271,22 @@ function HomePage({strains,onHand,coppedEntries,mixQueue=[],finishedReups,onNavi
 /* ═══════════════════════════════════════════
    STASH PAGE
    ═══════════════════════════════════════════ */
+function StrainNameInput({initialValue,strains,legacyStrains,existingStrainId,onSelect,onBlur,onFocus,showSugg,setShowSugg}){
+  const[nameInput,setNameInput]=useState(initialValue||"");
+  const nameSuggs=nameInput.length>0?strains.filter(s=>s.name.toLowerCase().includes(nameInput.toLowerCase())):[];
+  const legacySuggs=nameInput.length>0?legacyStrains.filter(l=>l.name.toLowerCase().includes(nameInput.toLowerCase())&&!nameSuggs.some(s=>s.name.toLowerCase()===l.name.toLowerCase())):[];
+  const getLatestCop=s=>s.cops[s.cops.length-1];
+  return(
+    <div style={{position:"relative"}}>
+      <input value={nameInput} onChange={e=>{setNameInput(e.target.value);setShowSugg(true);}} onBlur={e=>onBlur(e.target.value)} onFocus={()=>{setShowSugg(true);if(onFocus)onFocus();}} placeholder="enter strain name..." style={{width:"100%",boxSizing:"border-box",background:"rgba(240,235,225,0.06)",borderRadius:8,padding:"10px 14px",fontSize:15,color:"#F0EBE1",border:"0.5px solid rgba(240,235,225,0.1)",fontFamily:"inherit",outline:"none",marginBottom:existingStrainId?4:20}}/>
+      {showSugg&&(nameSuggs.length>0||legacySuggs.length>0)&&!existingStrainId&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:"#2C2420",border:"0.5px solid rgba(240,235,225,0.15)",borderRadius:8,marginTop:2,maxHeight:160,overflowY:"auto"}}>
+        {nameSuggs.map(s=><button key={s.id} onClick={()=>{setNameInput(s.name);onSelect(s);setShowSugg(false);}} style={{display:"flex",width:"100%",padding:"10px 14px",fontSize:13,color:"#F0EBE1",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontFamily:"inherit",alignItems:"center",gap:8}}><div style={{width:4,height:24,borderRadius:2,background:typeColor(getLatestCop(s).type)}}/><span style={{fontWeight:500}}>{s.name}</span><span style={{fontSize:11,color:"rgba(240,235,225,0.4)"}}>{s.cops.length} cop{s.cops.length>1?"s":""}</span></button>)}
+        {legacySuggs.map(l=><button key={l.id} onClick={()=>{setNameInput(l.name);onSelect({legacy:true,...l});setShowSugg(false);}} style={{display:"flex",width:"100%",padding:"10px 14px",fontSize:13,color:"#F0EBE1",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontFamily:"inherit",alignItems:"center",gap:8}}><div style={{width:4,height:24,borderRadius:2,background:l.type?typeColor(l.type):"#4A3E38"}}/><span style={{fontWeight:500}}>{l.name}</span><span style={{fontSize:11,color:"rgba(240,235,225,0.4)"}}>legacy</span></button>)}
+      </div>}
+    </div>
+  );
+}
+
 function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   view,setView,cop,setCop,session,setSession,editEntry,setEditEntry,
   activeReupId,setActiveReupId,mixSess,setMixSess,
@@ -284,9 +300,8 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   const getLatestCop=s=>s.cops[s.cops.length-1];
   const isNeverAgain=s=>s.cops.some(c=>c.session?.copAgain==="Never again");
   const fmtSource=s=>s==="TL"?"TL":s?.toLowerCase();
-  const[nameInput,setNameInput]=useState(cop.name);
-  const nameSuggs=nameInput.length>0?strains.filter(s=>s.name.toLowerCase().includes(nameInput.toLowerCase())):[];
-  const legacySuggs=nameInput.length>0?legacyStrains.filter(l=>l.name.toLowerCase().includes(nameInput.toLowerCase())&&!nameSuggs.some(s=>s.name.toLowerCase()===l.name.toLowerCase())):[];
+  const nameSuggs=[];
+  const legacySuggs=[];
 
   const handleSelectExisting=strain=>{setCop({...cop,name:strain.name,type:getLatestCop(strain).type||"",lean:getLatestCop(strain).lean||"",parent1:strain.parents?.[0]||"",parent2:strain.parents?.[1]||"",existingStrainId:strain.id});setNameInput(strain.name);setShowSugg(false);};
 
@@ -343,12 +358,19 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
       <div style={{display:"flex",gap:6,marginBottom:20}}>{["8th","quarter","half","oz"].map(a=><button key={a} onClick={()=>setCop({...cop,amount:cop.amount===a?"":a})} style={{flex:1,padding:"10px 8px",borderRadius:8,fontSize:12,fontFamily:"inherit",cursor:"pointer",fontWeight:cop.amount===a?500:400,background:cop.amount===a?P.sage:"rgba(240,235,225,0.06)",color:cop.amount===a?P.cream:"rgba(240,235,225,0.5)",border:cop.amount===a?"none":"0.5px solid rgba(240,235,225,0.1)"}}>{a}</button>)}</div>
       <div style={{borderTop:"0.5px solid rgba(240,235,225,0.1)",paddingTop:16,marginBottom:0}}/>
       <label style={{fontSize:12,fontWeight:500,color:"rgba(240,235,225,0.5)",display:"block",marginBottom:6}}>strain name</label>
-      <div style={{position:"relative"}}><input key={cop.existingStrainId||"name"} value={nameInput} onChange={e=>{setNameInput(e.target.value);setShowSugg(true);}} onBlur={e=>setCop({...cop,name:e.target.value,existingStrainId:null})} onFocus={()=>setShowSugg(true)} placeholder="enter strain name..." style={{width:"100%",boxSizing:"border-box",background:"rgba(240,235,225,0.06)",borderRadius:8,padding:"10px 14px",fontSize:15,color:"#F0EBE1",border:"0.5px solid rgba(240,235,225,0.1)",fontFamily:"inherit",outline:"none",marginBottom:cop.existingStrainId?4:20}}/>
-        {showSugg&&(nameSuggs.length>0||legacySuggs.length>0)&&!cop.existingStrainId&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:"#2C2420",border:"0.5px solid rgba(240,235,225,0.15)",borderRadius:8,marginTop:2,maxHeight:160,overflowY:"auto"}}>
-          {nameSuggs.map(s=><button key={s.id} onClick={()=>handleSelectExisting(s)} style={{display:"flex",width:"100%",padding:"10px 14px",fontSize:13,color:"#F0EBE1",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontFamily:"inherit",alignItems:"center",gap:8}}><div style={{width:4,height:24,borderRadius:2,background:typeColor(getLatestCop(s).type)}}/><span style={{fontWeight:500}}>{s.name}</span><span style={{fontSize:11,color:"rgba(240,235,225,0.4)"}}>{s.cops.length} cop{s.cops.length>1?"s":""}</span></button>)}
-          {legacySuggs.map(l=><button key={l.id} onClick={()=>{setCop({...cop,name:l.name,type:l.type||cop.type});setNameInput(l.name);setShowSugg(false);}} style={{display:"flex",width:"100%",padding:"10px 14px",fontSize:13,color:"#F0EBE1",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontFamily:"inherit",alignItems:"center",gap:8}}><div style={{width:4,height:24,borderRadius:2,background:l.type?typeColor(l.type):"#4A3E38"}}/><span style={{fontWeight:500}}>{l.name}</span><span style={{fontSize:11,color:"rgba(240,235,225,0.4)"}}>legacy</span></button>)}
-        </div>}
-      </div>
+      <StrainNameInput
+        initialValue={cop.name}
+        strains={strains}
+        legacyStrains={legacyStrains}
+        existingStrainId={cop.existingStrainId}
+        showSugg={showSugg}
+        setShowSugg={setShowSugg}
+        onBlur={name=>setCop({...cop,name,existingStrainId:null})}
+        onSelect={s=>{
+          if(s.legacy){setCop({...cop,name:s.name,type:s.type||cop.type});}
+          else{const lc=s.cops[s.cops.length-1];setCop({...cop,name:s.name,type:lc.type||"",lean:lc.lean||"",parent1:s.parents?.[0]||"",parent2:s.parents?.[1]||"",existingStrainId:s.id});}
+        }}
+      />
       {cop.existingStrainId&&<p style={{fontSize:11,color:P.sage,margin:"0 0 16px"}}>✓ new cop of existing strain</p>}
       <label style={{fontSize:12,fontWeight:500,color:"rgba(240,235,225,0.5)",display:"block",marginBottom:6}}>type</label>
       <ToggleGroup options={["Sativa","Indica","Hybrid"]} value={cop.type} onChange={v=>setCop({...cop,type:v,lean:""})}/>
