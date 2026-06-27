@@ -194,7 +194,6 @@ function HowToModal({onClose}){
 
 function HomePage({strains,onHand,coppedEntries,mixQueue=[],finishedReups,onNavigate,onLogCop,onOpenDetail,savedComparisons,savedTips,homeTipIntent,setHomeTipIntent}){
   const[showHelp,setShowHelp]=useState(false);
-  // Group on-hand by intent
   const grouped={asleep:[],awake:[],adventure:[],none:[]};
   onHand.forEach(o=>{const s=strains.find(ss=>ss.id===o.strainId);const intent=s?.intent||"none";grouped[intent]?.push({...o,strain:s});});
   const intentOrder=[{key:"asleep",icon:"🌙",label:"bedtime"},{key:"awake",icon:"☀️",label:"daytime"},{key:"adventure",icon:"🏕️",label:"adventure"}];
