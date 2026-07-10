@@ -695,8 +695,16 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
   const[p1,setP1]=useState("");
   const[p2,setP2]=useState("");
   const[unknownLineage,setUnknownLineage]=useState(false);
+  const cop=strain?.cops?.[copIdx];
+  useEffect(()=>{
+    if(!cop)return;
+    if(cop.status==="done"&&tab!=="overview"){
+      const hasContent=tab==="notes"?(cop.notes||[]).length>0:tab==="experiences"?(cop.experiences||[]).length>0:tab==="mixes"?(cop.mixes||[]).length>0:true;
+      if(!hasContent)setTab("overview");
+    }
+  },[cop?.id,cop?.status,tab]);
   if(!strain)return null;
-  const cop=strain.cops[copIdx];const s=cop?.session;
+  const s=cop?.session;
   const locked=strain.cops.some(c=>c.session?.copAgain==="Never again");
   const allDone=strain.cops.every(c=>c.status==="done");
   const canEditParents=!allDone&&!locked;
@@ -748,7 +756,12 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
     {strain.cops.length>1&&<div style={{display:"flex",gap:6,marginBottom:16,overflowX:"auto"}}>{strain.cops.map((c,i)=><button key={c.id} onClick={()=>{}} style={{padding:"6px 14px",borderRadius:20,fontSize:11,fontFamily:"inherit",cursor:"pointer",whiteSpace:"nowrap",fontWeight:copIdx===i?500:400,background:copIdx===i?typeTheme.accent:"transparent",color:copIdx===i?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:copIdx===i?"none":`0.5px solid ${typeTheme.cardBorder}`}}>cop #{i+1} · {c.date}{c.amount?` · ${c.amount}`:""}</button>)}</div>}
 
     {/* Detail tabs */}
-    <div style={{display:"flex",gap:4,marginBottom:20}}>{["overview","notes","experiences","mixes"].map(t=><button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"8px 6px",borderRadius:8,fontSize:11,fontFamily:"inherit",cursor:"pointer",fontWeight:tab===t?500:400,background:tab===t?typeTheme.accent:"transparent",color:tab===t?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:tab===t?"none":`0.5px solid ${typeTheme.cardBorder}`}}>{t}</button>)}</div>
+    <div style={{display:"flex",gap:4,marginBottom:20}}>{["overview","notes","experiences","mixes"].map(t=>{
+      const isFinished=cop?.status==="done";
+      const hasContent=t==="notes"?(cop?.notes||[]).length>0:t==="experiences"?(cop?.experiences||[]).length>0:t==="mixes"?(cop?.mixes||[]).length>0:true;
+      const disabled=isFinished&&t!=="overview"&&!hasContent;
+      return<button key={t} disabled={disabled} onClick={()=>!disabled&&setTab(t)} style={{flex:1,padding:"8px 6px",borderRadius:8,fontSize:11,fontFamily:"inherit",cursor:disabled?"default":"pointer",fontWeight:tab===t?500:400,background:tab===t?typeTheme.accent:"transparent",color:disabled?`${typeTheme.muted}60`:tab===t?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:tab===t?"none":`0.5px solid ${typeTheme.cardBorder}`,opacity:disabled?0.5:1}}>{t}</button>;
+    })}</div>
 
     {/* ── OVERVIEW TAB ── */}
     {tab==="overview"&&s&&<div>
@@ -925,7 +938,7 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
   const[profileOpen,setProfileOpen]=useState(false);
   const[expandedPinned,setExpandedPinned]=useState({});
   const[expandedMix,setExpandedMix]=useState(null);
-  const[showAllMixes,setShowAllMixes]=useState(false);
+  const[expandedBedtimeNote,setExpandedBedtimeNote]=useState(null);
   const[dotsOpen,setDotsOpen]=useState(null);
   const[saveConfirm,setSaveConfirm]=useState(null);
 
@@ -1004,7 +1017,9 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
   const goodCalls=allBedtime.filter(e=>!isWrongCall(e));
   const bdTerpAgg={};allBedtime.forEach(e=>(e.terpenes||[]).forEach(t=>{if(!bdTerpAgg[t])bdTerpAgg[t]={total:0,count:0};bdTerpAgg[t].total+=e.rating;bdTerpAgg[t].count++;}));
   const bdTerpRanked=Object.entries(bdTerpAgg).map(([name,d])=>({name,avg:+(d.total/d.count).toFixed(1),count:d.count})).sort((a,b)=>b.avg-a.avg).slice(0,5);
-  const bedtimeExps=strains.flatMap(s=>s.cops.flatMap(c=>(c.experiences||[]).filter(e=>e.bedtime).map(e=>({...e,strainName:s.name,strainType:c.type}))));
+  const bedtimeSessionNotes=allCops.filter(c=>c.session?.bedtime&&c.session?.notes&&c.session.notes.trim().length>0).map(c=>({id:"session-"+c.id,strainName:c.strainName,strainType:c.type,note:c.session.notes,date:c.session?.date||c.date}));
+  const bedtimeExpNotes=strains.flatMap(s=>s.cops.flatMap(c=>(c.experiences||[]).filter(e=>e.bedtime&&e.note&&e.note.trim().length>0).map(e=>({...e,id:"exp-"+e.id,strainName:s.name,strainType:c.type}))));
+  const bedtimeExps=[...bedtimeSessionNotes,...bedtimeExpNotes];
 
   // Intent
   const intentCounts={asleep:0,awake:0,adventure:0};const intentRatings={asleep:[],awake:[],adventure:[]};
@@ -1079,7 +1094,7 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
   const mixProfile=<div>
     <p style={{fontSize:10,fontWeight:500,color:IS.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 10px"}}>reviewed mixes</p>
     {uniqueMixes.length===0&&<p style={{fontSize:12,color:IS.muted}}>no reviewed mixes yet</p>}
-    {(showAllMixes?uniqueMixes:uniqueMixes.slice(0,3)).map(m=>{const isOpen=expandedMix===m.id;const pName=m.primaryStrain||m.strainName;const wName=m.withStrain;const pSolo=getSoloRating(m.primaryStrainId);const wSolo=getSoloRating(m.withStrainId);const pType=getStrainType(pName);const wType=getStrainType(wName);const soloAvg=pSolo&&wSolo?((pSolo+wSolo)/2):null;const mixRating=m.rating||0;const delta=soloAvg?((mixRating-soloAvg)).toFixed(1):null;return(<div key={m.id} style={{background:isOpen?"rgba(107,74,107,0.1)":"rgba(107,74,107,0.08)",borderRadius:8,marginBottom:6,border:isOpen?"1px solid rgba(107,74,107,0.25)":"1px solid rgba(107,74,107,0.15)",overflow:"hidden"}}>
+    {uniqueMixes.map(m=>{const isOpen=expandedMix===m.id;const pName=m.primaryStrain||m.strainName;const wName=m.withStrain;const pSolo=getSoloRating(m.primaryStrainId);const wSolo=getSoloRating(m.withStrainId);const pType=getStrainType(pName);const wType=getStrainType(wName);const soloAvg=pSolo&&wSolo?((pSolo+wSolo)/2):null;const mixRating=m.rating||0;const delta=soloAvg?((mixRating-soloAvg)).toFixed(1):null;return(<div key={m.id} style={{background:isOpen?"rgba(107,74,107,0.1)":"rgba(107,74,107,0.08)",borderRadius:8,marginBottom:6,border:isOpen?"1px solid rgba(107,74,107,0.25)":"1px solid rgba(107,74,107,0.15)",overflow:"hidden"}}>
       <div onClick={()=>setExpandedMix(isOpen?null:m.id)} style={{padding:"10px 12px",cursor:"pointer"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:m.vibeTags?.length>0?4:0}}>
           <span style={{fontSize:12,fontWeight:500,color:IS.text}}>{pName} x {wName}</span>
@@ -1091,6 +1106,7 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
         {m.vibeTags?.length>0&&<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{m.vibeTags.slice(0,4).map(v=><span key={v} style={{fontSize:9,padding:"2px 5px",borderRadius:4,background:"rgba(107,74,107,0.1)",color:"#6B4A6B",border:"0.5px solid rgba(107,74,107,0.2)"}}>{v.toLowerCase()}</span>)}</div>}
       </div>
       {isOpen&&<div style={{borderTop:"0.5px solid rgba(107,74,107,0.15)",padding:"12px"}}>
+        {m.notes&&<p style={{fontSize:11,color:IS.text,margin:"0 0 12px",lineHeight:1.5}}>{m.notes}</p>}
         <p style={{fontSize:9,letterSpacing:0.5,textTransform:"uppercase",color:"rgba(107,74,107,0.5)",margin:"0 0 8px"}}>solo vs mixed</p>
         {[{name:pName,type:pType,solo:pSolo,id:m.primaryStrainId},{name:wName,type:wType,solo:wSolo,id:m.withStrainId}].map(s=><div key={s.name} style={{background:"rgba(107,74,107,0.06)",borderRadius:8,padding:"10px 12px",marginBottom:6,border:"0.5px solid rgba(107,74,107,0.1)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1113,7 +1129,6 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
         </div>}
       </div>}
     </div>);})}
-    {!showAllMixes&&uniqueMixes.length>3&&<button onClick={()=>setShowAllMixes(true)} style={{width:"100%",padding:"8px",borderRadius:8,fontSize:11,color:"#6B4A6B",background:"rgba(107,74,107,0.06)",border:"0.5px solid rgba(107,74,107,0.15)",cursor:"pointer",fontFamily:"inherit",marginTop:2}}>show all {uniqueMixes.length} mixes</button>}
   </div>;
 
   const outdoorProfile=<div>
@@ -1135,7 +1150,20 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
     {goodCalls.length>0&&<><p style={{fontSize:10,fontWeight:500,color:IS.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 8px"}}>🌙 best bedtime strains</p>{[...goodCalls].sort((a,b)=>b.rating-a.rating).slice(0,5).map((e,i)=>{const s=e.type==="session"?strains.find(x=>x.cops.some(c=>c.id===e.id)):null;return(<div key={i} onClick={()=>s&&onPeek&&onPeek(s)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,padding:"7px 10px",background:"rgba(91,74,122,0.08)",borderRadius:7,border:"0.5px solid rgba(91,74,122,0.15)",cursor:s?"pointer":"default"}}><div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:12,color:"#5B4A7A",fontWeight:500}}>{e.name}</span>{e.type==="mix"&&<span style={{fontSize:9,color:IS.muted}}>mix</span>}</div><div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=e.rating} size={12} color="#5B4A7A"/>)}</div></div>);})} </>}
     {bdTerpRanked.length>0&&<><p style={{fontSize:10,fontWeight:500,color:IS.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"14px 0 8px"}}>bedtime terpene affinity</p>{bdTerpRanked.map((t,i)=><div key={t.name} style={{marginBottom:i<bdTerpRanked.length-1?8:0}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:11,color:IS.text}}>{t.name.toLowerCase()}</span><span style={{fontSize:10,color:"#5B4A7A"}}>{t.avg} avg · {t.count}x</span></div><div style={{height:3,background:"#DDD5C4",borderRadius:2}}><div style={{height:3,background:"#5B4A7A",borderRadius:2,width:`${(t.avg/5)*100}%`}}/></div></div>)}</>}
     {wrongCalls.length>0&&<><p style={{fontSize:10,fontWeight:500,color:IS.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"14px 0 8px"}}>😬 wrong call list</p>{wrongCalls.map((e,i)=>{const reasons=[];if(e.spectrums?.sw>0)reasons.push("hit active");(e.vibeTags||[]).filter(t=>WRONG_VIBES.includes(t)).forEach(v=>reasons.push(v.toLowerCase()));return(<div key={i} style={{background:"rgba(193,90,74,0.07)",borderRadius:7,padding:"8px 10px",marginBottom:5,border:"0.5px solid rgba(193,90,74,0.15)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:reasons.length>0?4:0}}><span style={{fontSize:12,fontWeight:500,color:IS.text}}>{e.name}</span><div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=e.rating} size={11} color="#8B3A2A"/>)}</div></div>{reasons.length>0&&<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{reasons.map((r,ri)=><span key={ri} style={{fontSize:9,background:"rgba(193,90,74,0.1)",color:"#8B3A2A",padding:"2px 6px",borderRadius:4,border:"0.5px solid rgba(193,90,74,0.2)"}}>{r}</span>)}</div>}</div>);})} </>}
-    {bedtimeExps.length>0&&<><p style={{fontSize:10,fontWeight:500,color:IS.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"14px 0 8px"}}>bedtime experiences</p>{bedtimeExps.map(e=><div key={e.id} style={{background:"rgba(91,74,122,0.06)",borderRadius:7,padding:"9px 10px",marginBottom:5,border:"0.5px solid rgba(91,74,122,0.12)"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:11,fontWeight:500,color:"#5B4A7A"}}>{e.strainName}</span><span style={{fontSize:9,color:IS.muted}}>{e.date}</span></div>{e.note&&<p style={{fontSize:11,color:IS.text,margin:0,lineHeight:1.4}}>{e.note}</p>}</div>)}</>}
+    {bedtimeExps.length>0&&<><p style={{fontSize:10,fontWeight:500,color:IS.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"14px 0 8px"}}>bedtime notes</p>
+      <div style={{background:"rgba(91,74,122,0.04)",borderRadius:10,padding:8,border:"0.5px solid rgba(91,74,122,0.1)"}}>
+        {bedtimeExps.map(e=>{const isOpen=expandedBedtimeNote===e.id;return(<div key={e.id} style={{background:isOpen?"rgba(91,74,122,0.09)":"rgba(91,74,122,0.06)",borderRadius:7,marginBottom:5,border:isOpen?"1px solid rgba(91,74,122,0.22)":"0.5px solid rgba(91,74,122,0.12)",overflow:"hidden"}}>
+          <div onClick={()=>setExpandedBedtimeNote(isOpen?null:e.id)} style={{padding:"9px 10px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:11,fontWeight:500,color:"#5B4A7A"}}>{e.strainName}</span>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:9,color:IS.muted}}>{e.date}</span>
+              <span style={{fontSize:10,color:"rgba(91,74,122,0.4)"}}>{isOpen?"↑":"↓"}</span>
+            </div>
+          </div>
+          {isOpen&&e.note&&<p style={{fontSize:11,color:IS.text,margin:0,lineHeight:1.5,padding:"0 10px 10px"}}>{e.note}</p>}
+        </div>);})}
+      </div>
+    </>}
   </div>;
 
   const labelProfile=<div>
@@ -1289,11 +1317,11 @@ function ComparePage({strains,reups=[],savedComparisons,onSaveComparison,onDelet
   const eligible=strains.filter(s=>s.cops.some(c=>c.session));
 
   // shared re-up detection — checks copIds first, falls back to strainNames
-  const sharedReup=ready?reups.find(r=>{
+  const sharedReup=ready?(reups.find(r=>{
     if(r.copIds&&r.copIds.length>1&&r.copIds.includes(copA?.id)&&r.copIds.includes(copB?.id))return true;
     if(r.strainNames&&r.strainNames.includes(strainA.name)&&r.strainNames.includes(strainB.name))return true;
     return false;
-  }):null;
+  })||HISTORICAL_REUPS.find(h=>h.strainNames.includes(strainA.name)&&h.strainNames.includes(strainB.name))):null;
 
   const D={bg:"#1E1628",card:"rgba(200,184,232,0.05)",border:"rgba(200,184,232,0.08)",text:"#E0D8F0",muted:"rgba(200,184,232,0.4)",accent:"#9B8ABE"};
   const cA="#7B6B9E";const cB="#6B8F5A";
@@ -1991,7 +2019,12 @@ export default function App(){
     if(what==="session")setSession({rating:0,smokesLike:"",smokesLikeLean:"",sw:0,sf:0,pull:0,setting:"indoor",bedtime:false,tasteTags:[],vibeTags:[],notes:"",copAgain:""});
     if(what==="mix")setMixSess({rating:0,sw:0,sf:0,pull:0,bedtime:false,vibeTags:[],notes:""});
   };
-  const handleAddReup=r=>setReups([...reups,r]);
+  const handleAddReup=r=>{
+    if(r.number){setReups([...reups,r]);return;}
+    const allAssignedNumbers=[...finishedReups,...reups].map(x=>x.number||0);
+    const nextNum=allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1;
+    setReups([...reups,{...r,number:nextNum}]);
+  };
 
   // ── Handlers ──
   const handleSaveCop=()=>{
@@ -2027,7 +2060,8 @@ export default function App(){
     if(reupForCop){const allDone=reupForCop.copIds.every(cId=>{const c=newStrains.flatMap(s=>s.cops).find(cc=>cc.id===cId);return c?.status==="done";});
       const noPending=(reupForCop.coppedIds||[]).length===0;
       if(allDone&&noPending){const fr={...reupForCop,closed:true,closedDate:today(),strainNames:reupForCop.copIds.map(cId=>{const strain=newStrains.find(s=>s.cops.some(c=>c.id===cId));return strain?.name;}).filter(Boolean)};
-        const nextNum=reupForCop.number||(finishedReups.length>0?Math.max(...finishedReups.map(r=>r.number||0))+1:HISTORICAL_REUPS.length+1);
+        const allAssignedNumbers=[...finishedReups,...reups].map(r=>r.number||0);
+        const nextNum=reupForCop.number||(allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1);
         setFinishedReups([{...fr,number:nextNum},...finishedReups]);setReups(reups.filter(r=>r.id!==reupForCop.id));
       }}
     setFinishingCop(null);setFinishCopAgain("");
