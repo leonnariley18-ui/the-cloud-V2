@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#120D06" />
+    <title>cLOUD</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body, #root { height: 100%; }
+      body { background: #120D06; }
+    </style>
+    <link rel="manifest" href="/the-cloud-V2/manifest.json" />
+    <link rel="apple-touch-icon" href="/the-cloud-V2/icon.png" />
+    <meta name="apple-mobile-web-app-title" content="cLOUD" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/the-cloud-V2/sw.js");
+        });
+      }
+    </script>
+  </body>
+</html>
