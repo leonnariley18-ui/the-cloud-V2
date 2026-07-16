@@ -2133,7 +2133,98 @@ function DesktopHomePage({strains,onHand,reups,finishedReups,savedComparisons,sa
 /* ═══════════════════════════════════════════
    DESKTOP SHELL
    ═══════════════════════════════════════════ */
-const DESKTOP_BG={
+/* ═══════════════════════════════════════════
+   STASH SIDEBAR OVERLAY (Desktop)
+   ═══════════════════════════════════════════ */
+function StashSidebar({stashOpen,setStashOpen,strains,onHand,finishedReups,onSelectStrain}){
+  if(!stashOpen)return null;
+  const needsReview=strains.filter(s=>s.needsReview===true);
+  const getTypeColor=t=>({"Sativa":"#C9A84C","Indica":"#7B6B9E","Hybrid":"#6B7F5A"}[t]||"#8C7E6A");
+
+  const StrainCard=({strain,status})=>{
+    const isCurrent=onHand.some(oh=>oh.strainId===strain.id&&oh.status==="viewing");
+    const type=strain.type||"Unknown";
+    const typeColor=getTypeColor(type);
+
+    return(
+      <div onClick={()=>onSelectStrain(strain)}
+        style={{padding:"8px 10px",borderRadius:4,marginBottom:4,position:"relative",overflow:"hidden",background:isCurrent?"rgba(30,20,50,0.8)":"rgba(10,8,5,0.75)",border:isCurrent?`1.5px solid rgba(139,109,180,0.35)`:`1.5px solid rgba(91,138,114,0.18)`,cursor:"pointer"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:"1.5px",background:`linear-gradient(90deg,${typeColor}40,transparent)`}}/>
+        <div style={{fontSize:11,color:isCurrent?"rgba(196,184,216,0.95)":"rgba(255,255,255,0.88)",fontWeight:isCurrent?500:400}}>
+          {strain.name}
+        </div>
+        {isCurrent&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(196,184,216,0.5)",marginTop:2}}>VIEWING · {type.toUpperCase()} · DAY {Math.floor(Math.random()*14)+1}</div>}
+        {!isCurrent&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(255,255,255,0.3)",marginTop:2}}>{type.toUpperCase()} · {status}</div>}
+      </div>
+    );
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:100,display:"flex",pointerEvents:"auto"}}>
+      <div style={{width:280,flexShrink:0,position:"relative",background:"#081A08",borderRight:"0.5px solid rgba(232,200,154,0.08)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {/* Botanical background SVG pattern */}
+        <svg style={{position:"absolute",inset:0,width:"100%",height:"100%"}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 520" preserveAspectRatio="xMidYMid slice">
+          <rect fill="#081A08"/>
+          <path d="M0 0C40 80 80 160 60 260S20 400 0 520" stroke="#164016" strokeWidth="18" fill="none" opacity="0.6"/>
+          <path d="M40 0C80 100 100 180 80 300S40 440 20 520" stroke="#1A5A1A" strokeWidth="12" fill="none" opacity="0.4"/>
+          <path d="M100 0C130 90 140 200 120 320S80 450 60 520" stroke="#206020" strokeWidth="14" fill="none" opacity="0.3"/>
+          <path d="M160 0C180 70 200 160 180 280S140 420 120 520" stroke="#164016" strokeWidth="10" fill="none" opacity="0.5"/>
+          <path d="M220 0C240 100 260 200 240 340S200 460 180 520" stroke="#1A5A1A" strokeWidth="16" fill="none" opacity="0.35"/>
+          <path d="M280 0C260 80 240 180 250 300S270 440 280 520" stroke="#206020" strokeWidth="11" fill="none" opacity="0.4"/>
+        </svg>
+        <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.72)"}}/>
+
+        {/* Content */}
+        <div style={{position:"relative",padding:"16px 14px 12px",flex:1,overflowY:"auto",zIndex:1}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:"#E8C89A",letterSpacing:1,marginBottom:12}}>cLOUD</div>
+
+          {/* Stash header */}
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",background:"rgba(58,107,42,0.15)",border:"1.5px solid rgba(58,107,42,0.3)",borderRadius:8,marginBottom:16}}>
+            <span style={{fontSize:13,color:"rgba(140,200,140,0.8)"}}>◈</span>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(140,200,140,0.8)"}}>STASH</span>
+            <span onClick={()=>setStashOpen(false)} style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"rgba(140,200,140,0.4)",marginLeft:"auto",cursor:"pointer"}}>✕</span>
+          </div>
+
+          {/* Needs Review */}
+          <div style={{padding:"4px 8px",borderRadius:"0 4px 4px 0",marginBottom:8,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(139,109,139,0.2),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(139,109,139,0.5)"}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,color:"rgba(139,109,139,0.7)"}}>NEEDS REVIEW · {needsReview.length}</span>
+          </div>
+          {needsReview.map(s=><StrainCard key={s.id} strain={s} status={`JUN ${Math.floor(Math.random()*30)+1}`}/>)}
+
+          {/* On Hand */}
+          <div style={{padding:"4px 8px",borderRadius:"0 4px 4px 0",marginBottom:8,marginTop:14,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(91,138,114,0.2),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(91,138,114,0.5)"}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,color:"rgba(91,138,114,0.8)"}}>ON HAND · {onHand.length}</span>
+          </div>
+          {onHand.map(oh=>{
+            const strain=strains.find(s=>s.id===oh.strainId);
+            return strain?<StrainCard key={oh.id} strain={strain} status={`DAY ${Math.floor(Math.random()*30)+1}`}/>:null;
+          })}
+
+          {/* Finished Re-ups */}
+          <div style={{padding:"4px 8px",borderRadius:"0 4px 4px 0",marginBottom:8,marginTop:14,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(232,200,154,0.12),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(232,200,154,0.3)"}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,color:"rgba(232,200,154,0.55)"}}>FINISHED RE-UPS</span>
+          </div>
+          {finishedReups.slice(0,2).map((rup,i)=>(
+            <div key={rup.id} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:"rgba(10,8,5,0.65)",border:"1.5px solid rgba(232,200,154,0.08)"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:10,color:"rgba(232,200,154,0.6)"}}>#7</span>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.25)"}}>JUN 28</span>
+              </div>
+              <div style={{fontSize:9,color:"rgba(232,200,154,0.35)",marginTop:2}}>Re-up #{rup.number||i+1}</div>
+            </div>
+          ))}
+
+          <div style={{flex:1}}/>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"8px 0"}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:"#4A7A4A"}}/>
+          </div>
+        </div>
+      </div>
+      <div onClick={()=>setStashOpen(false)} style={{flex:1,cursor:"pointer"}}/>
+    </div>
+  );
+}
+   const DESKTOP_BG={
   home:"#F0EBE1",stash:"#12220A",library:"#1A1410",insights:"#1A1410",
   compare:"#1A1028",recommender:"#0F1420",detail:"#1A1410"
 };
