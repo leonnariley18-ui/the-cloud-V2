@@ -2311,7 +2311,7 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
 /* ═══════════════════════════════════════════
    STRAIN DETAIL WINDOW (Desktop)
    ═══════════════════════════════════════════ */
-function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strains,onHand,onAddNote,onAddExperience,onFinishCop,onCreateMix}){
+function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strains,onHand,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
   if(!selectedStrain)return null;
 
   const liveStrain=strains.find(s=>s.id===selectedStrain.id)||null;
@@ -2323,6 +2323,9 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
 
   const[addingNote,setAddingNote]=useState(false);
   const[noteDraft,setNoteDraft]=useState("");
+  const[editingNoteId,setEditingNoteId]=useState(null);
+  const[editNoteDraft,setEditNoteDraft]=useState("");
+  const[confirmDeleteNoteId,setConfirmDeleteNoteId]=useState(null);
   const[addingExp,setAddingExp]=useState(false);
   const[expDraft,setExpDraft]=useState({text:"",setting:"indoor",bedtime:false,vibeTags:[]});
   const[finishing,setFinishing]=useState(false);
@@ -2335,6 +2338,16 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
     if(!isReal||!noteDraft.trim())return;
     onAddNote(strain.id,cop.id,noteDraft);
     setNoteDraft("");setAddingNote(false);
+  };
+  const saveEditNote=noteId=>{
+    if(!editNoteDraft.trim())return;
+    onEditNote(strain.id,cop.id,noteId,editNoteDraft);
+    setEditingNoteId(null);setEditNoteDraft("");
+  };
+  const deleteNote=noteId=>{
+    if(confirmDeleteNoteId!==noteId){setConfirmDeleteNoteId(noteId);return;}
+    onDeleteNote(strain.id,cop.id,noteId);
+    setConfirmDeleteNoteId(null);
   };
   const saveExperience=()=>{
     if(!isReal)return;
@@ -2462,8 +2475,28 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
               {(!cop?.notes||cop.notes.length===0)&&!addingNote&&<p style={{fontSize:11,color:theme.dimText,fontStyle:"italic"}}>no notes yet</p>}
               {(cop?.notes||[]).slice().reverse().map(n=>(
                 <div key={n.id} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:theme.cardBg,border:`0.5px solid ${theme.cardBorder}`}}>
-                  <div style={{fontSize:12,color:theme.text,marginBottom:4}}>{n.text}</div>
-                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText}}>{n.date}</div>
+                  {editingNoteId===n.id?(
+                    <div>
+                      <textarea value={editNoteDraft} onChange={e=>setEditNoteDraft(e.target.value)} rows={3} style={{width:"100%",boxSizing:"border-box",background:"transparent",border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:8,fontSize:12,color:theme.text,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:6}}/>
+                      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                        <span onClick={()=>{setEditingNoteId(null);setEditNoteDraft("");}} style={{fontSize:10,color:theme.dimText,cursor:"pointer"}}>cancel</span>
+                        <span onClick={()=>saveEditNote(n.id)} style={{fontSize:10,color:theme.accent,fontWeight:500,cursor:"pointer"}}>save</span>
+                      </div>
+                    </div>
+                  ):(
+                    <>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                        <div style={{fontSize:12,color:theme.text,marginBottom:4,flex:1}}>{n.text}</div>
+                        {canEdit&&(
+                          <div style={{display:"flex",gap:6,flexShrink:0}}>
+                            <span onClick={()=>{setEditingNoteId(n.id);setEditNoteDraft(n.text);}} style={{fontSize:9,color:theme.dimText,cursor:"pointer"}}>edit</span>
+                            <span onClick={()=>deleteNote(n.id)} style={{fontSize:9,color:"#C15A4A",cursor:"pointer"}}>{confirmDeleteNoteId===n.id?"confirm?":"delete"}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText}}>{n.date}</div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -2824,6 +2857,15 @@ function DesktopShell(){
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:[...(c.notes||[]),note]})};}));
   };
 
+  const handleEditNote=(strainId,copId,noteId,newText)=>{
+    if(!newText.trim())return;
+    setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:(c.notes||[]).map(n=>n.id!==noteId?n:{...n,text:newText.trim()})})};}));
+  };
+
+  const handleDeleteNote=(strainId,copId,noteId)=>{
+    setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:(c.notes||[]).filter(n=>n.id!==noteId)})};}));
+  };
+
   const handleAddExperience=(strainId,copId,text,setting,bedtime,vibeTags)=>{
     if(!text.trim()&&(!vibeTags||vibeTags.length===0))return;
     const exp={id:Date.now(),date:today(),setting,bedtime,note:text.trim(),vibeTags:[...vibeTags],mixedWith:null};
@@ -2904,6 +2946,8 @@ function DesktopShell(){
         strains={strains}
         onHand={onHand}
         onAddNote={handleAddNote}
+        onEditNote={handleEditNote}
+        onDeleteNote={handleDeleteNote}
         onAddExperience={handleAddExperience}
         onFinishCop={handleFinishCop}
         onCreateMix={handleCreateMix}
