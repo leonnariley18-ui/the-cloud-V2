@@ -320,7 +320,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   handleSaveCop,handleSaveSession,handleMarkDone,handleConfirmDone,
   handleReviewMix,handleSaveMixReview,
   setCoppedIntent,setCoppedAmount,setFinishingCop,
-  openDetail,openDetailTab,reset,showSugg,setShowSugg,legacyStrains,handleAddReup,
+  openDetail,openDetailTab,reset,showSugg,setShowSugg,legacyStrains,handleAddReup,handleDeleteReup,confirmDeleteItem,
   handleInlineNote,handleInlineExperience,onAddMixQueue}){
 
   const getLatestCop=s=>s.cops[s.cops.length-1];
@@ -358,16 +358,19 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
         const cops=strains.flatMap(s=>s.cops.filter(c=>r.copIds.includes(c.id)).map(c=>({...c,strain:s})));
         const copped=coppedEntries.filter(c=>r.coppedIds?.includes(c.id));
         const total=cops.length+copped.length;
-        return(<button key={r.id} onClick={()=>{setActiveReupId(r.id);setView("cop");}} style={{display:"block",width:"100%",textAlign:"left",background:"rgba(240,235,225,0.06)",borderRadius:10,padding:14,marginBottom:8,border:"0.5px solid rgba(240,235,225,0.1)",cursor:"pointer",fontFamily:"inherit"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-            <span style={{fontSize:14,fontWeight:500,color:"#F0EBE1"}}>re-up #{r.number||"?"} · {r.date}</span>
-            <span style={{fontSize:11,color:"rgba(240,235,225,0.5)"}}>{total} strain{total!==1?"s":""}</span>
-          </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-            {cops.map(c=><span key={c.id} style={{fontSize:10,background:"rgba(240,235,225,0.1)",color:"rgba(240,235,225,0.7)",padding:"2px 6px",borderRadius:6}}>{c.strain.name}</span>)}
-            {copped.map(c=><span key={c.id} style={{fontSize:10,background:"rgba(193,127,74,0.2)",color:"#C17F4A",padding:"2px 6px",borderRadius:6}}>{c.strainName}</span>)}
-          </div>
-        </button>);
+        return(<div key={r.id} style={{display:"block",width:"100%",textAlign:"left",background:"rgba(240,235,225,0.06)",borderRadius:10,padding:14,marginBottom:8,border:"0.5px solid rgba(240,235,225,0.1)",fontFamily:"inherit"}}>
+          <button onClick={()=>{setActiveReupId(r.id);setView("cop");}} style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <span style={{fontSize:14,fontWeight:500,color:"#F0EBE1"}}>re-up #{r.number||"?"} · {r.date}</span>
+              <span style={{fontSize:11,color:"rgba(240,235,225,0.5)"}}>{total} strain{total!==1?"s":""}</span>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {cops.map(c=><span key={c.id} style={{fontSize:10,background:"rgba(240,235,225,0.1)",color:"rgba(240,235,225,0.7)",padding:"2px 6px",borderRadius:6}}>{c.strain.name}</span>)}
+              {copped.map(c=><span key={c.id} style={{fontSize:10,background:"rgba(193,127,74,0.2)",color:"#C17F4A",padding:"2px 6px",borderRadius:6}}>{c.strainName}</span>)}
+            </div>
+          </button>
+          {total===0&&<button onClick={()=>handleDeleteReup(r.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#C15A4A",fontFamily:"inherit",padding:0,marginTop:8}}>{confirmDeleteItem==="reup-"+r.id?"confirm delete?":"delete empty re-up"}</button>}
+        </div>);
       })}</>}
       {reups.filter(r=>!r.closed).length<2&&<button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,date:today(),closed:false,copIds:[],coppedIds:[]};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:reups.filter(r=>!r.closed).length>0?8:0}}>+ start a new re-up</button>}
       {reups.filter(r=>!r.closed).length>=2&&<p style={{fontSize:11,color:"rgba(240,235,225,0.4)",margin:"8px 0 0",fontStyle:"italic",textAlign:"center"}}>you can have up to 2 open re-ups at a time</p>}
@@ -2562,6 +2565,21 @@ function MobileShell(){
     const nextNum=allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1;
     setReups([...reups,{...r,number:nextNum}]);
   };
+  const handleDeleteReup=reupId=>{
+    const target=reups.find(r=>r.id===reupId);
+    if(!target)return;
+    const isEmpty=(target.copIds||[]).length===0&&(target.coppedIds||[]).length===0;
+    if(!isEmpty)return;
+    if(confirmDeleteItem!=="reup-"+reupId){setConfirmDeleteItem("reup-"+reupId);return;}
+    const remainingActive=reups.filter(r=>r.id!==reupId);
+    const sortedFinished=[...finishedReups].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
+    const sortedActive=[...remainingActive].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
+    const{finished:renumberedFinished,active:renumberedActive}=assignReupNumbers(sortedFinished,sortedActive);
+    setFinishedReups(renumberedFinished);
+    setReups(renumberedActive);
+    setConfirmDeleteItem(null);
+    if(activeReupId===reupId)setActiveReupId(null);
+  };
 
   // ── Handlers ──
   const handleSaveCop=()=>{
@@ -2720,7 +2738,7 @@ function MobileShell(){
   const renderPage=()=>{
     switch(page){
       case "home": return <HomePage strains={strains} onHand={onHand} coppedEntries={coppedEntries} mixQueue={mixQueue} finishedReups={finishedReups} onNavigate={navigate} onLogCop={()=>{setPage("stash");setMenuOpen(false);setView("reupPicker");window.scrollTo(0,0);}} onOpenDetail={openDetail} savedComparisons={savedComparisons} savedTips={savedTips}/>;
-      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
+      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
       case "library": return <LibraryPage strains={strains} legacyStrains={legacyStrains} onOpenDetail={openDetail} onPeek={s=>setPeekStrain(s)}/>;
       case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
       case "insights": return <InsightsPage strains={strains} onHand={onHand} onPeek={s=>setPeekStrain(s)} dismissed={insightsDismissed} setDismissed={setInsightsDismissed} saved={insightsSaved} setSaved={setInsightsSaved}/>;
