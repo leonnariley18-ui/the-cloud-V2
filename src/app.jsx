@@ -2311,12 +2311,46 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
 /* ═══════════════════════════════════════════
    STRAIN DETAIL WINDOW (Desktop)
    ═══════════════════════════════════════════ */
-function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strains}){
+function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strains,onHand,onAddNote,onAddExperience,onFinishCop,onCreateMix}){
   if(!selectedStrain)return null;
 
-  const strain=selectedStrain;
+  const liveStrain=strains.find(s=>s.id===selectedStrain.id)||null;
+  const isReal=!!liveStrain;
+  const strain=liveStrain||selectedStrain;
   const cop=strain.cops?.[0];
   const session=cop?.session;
+  const canEdit=isReal&&cop?.status==="on-hand";
+
+  const[addingNote,setAddingNote]=useState(false);
+  const[noteDraft,setNoteDraft]=useState("");
+  const[addingExp,setAddingExp]=useState(false);
+  const[expDraft,setExpDraft]=useState({text:"",setting:"indoor",bedtime:false,vibeTags:[]});
+  const[finishing,setFinishing]=useState(false);
+  const[copAgainChoice,setCopAgainChoice]=useState("");
+  const[mixMode,setMixMode]=useState(false);
+  const[mixWith,setMixWith]=useState(null);
+  const[mixSess,setMixSess]=useState({rating:0,sw:0,sf:0,pull:0,bedtime:false,vibeTags:[],notes:""});
+
+  const saveNote=()=>{
+    if(!isReal||!noteDraft.trim())return;
+    onAddNote(strain.id,cop.id,noteDraft);
+    setNoteDraft("");setAddingNote(false);
+  };
+  const saveExperience=()=>{
+    if(!isReal)return;
+    if(!expDraft.text.trim()&&expDraft.vibeTags.length===0)return;
+    onAddExperience(strain.id,cop.id,expDraft.text,expDraft.setting,expDraft.bedtime,expDraft.vibeTags);
+    setExpDraft({text:"",setting:"indoor",bedtime:false,vibeTags:[]});setAddingExp(false);
+  };
+  const confirmFinish=()=>{
+    onFinishCop({strainId:strain.id,copId:cop.id},copAgainChoice);
+    onClose();
+  };
+  const saveMix=rateLater=>{
+    if(!mixWith)return;
+    onCreateMix(strain,cop,mixWith,mixSess,rateLater);
+    setMixWith(null);setMixMode(false);setMixSess({rating:0,sw:0,sf:0,pull:0,bedtime:false,vibeTags:[],notes:""});
+  };
 
   const typeThemes={
     Indica:{border:"rgba(139,109,180,0.6)",gradient:"linear-gradient(90deg,#1A1028,#2E1A3A,#1A1028)",accent:"rgba(139,109,180)",text:"rgba(196,184,216)",lightText:"rgba(196,184,216,0.7)",dimText:"rgba(139,109,180,0.5)",cardBg:"rgba(139,109,180,0.06)",cardBorder:"rgba(139,109,180,0.12)",buttonBg:"rgba(139,109,180,0.15)",buttonBorder:"rgba(139,109,180,0.3)"},
@@ -2359,18 +2393,22 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
               {/* Spectrums */}
               <div style={{marginBottom:8}}>
                 <div style={{fontSize:8,fontWeight:500,color:theme.dimText,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 8px",borderLeft:`2px solid ${theme.accent}`,background:`linear-gradient(90deg,${theme.accent}30,transparent)`,padding:"4px 8px"}}>SPECTRUMS</div>
-                <div style={{marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>couch</span><span>active</span></div>
-                  <div style={{height:3,position:"relative",borderRadius:2,background:`${theme.accent}20`,border:`0.5px solid ${theme.accent}40`}}>
-                    <div style={{position:"absolute",top:-4,left:"22%",width:10,height:10,borderRadius:"50%",background:theme.text,borderColor:theme.border,borderWidth:"1.5px",borderStyle:"solid"}}/>
+                {session?.spectrums?(<>
+                  <div style={{marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>couch</span><span>active</span></div>
+                    <div style={{height:3,position:"relative",borderRadius:2,background:`${theme.accent}20`,border:`0.5px solid ${theme.accent}40`}}>
+                      <div style={{position:"absolute",top:-4,left:`${((session.spectrums.sw||0)+3)/6*100}%`,width:10,height:10,borderRadius:"50%",background:theme.text,borderColor:theme.border,borderWidth:"1.5px",borderStyle:"solid",transform:"translateX(-50%)"}}/>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>dreamy</span><span>analytical</span></div>
-                  <div style={{height:3,position:"relative",borderRadius:2,background:`${theme.accent}20`,border:`0.5px solid ${theme.accent}40`}}>
-                    <div style={{position:"absolute",top:-4,left:"35%",width:10,height:10,borderRadius:"50%",background:theme.text,borderColor:theme.border,borderWidth:"1.5px",borderStyle:"solid"}}/>
+                  <div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>dreamy</span><span>analytical</span></div>
+                    <div style={{height:3,position:"relative",borderRadius:2,background:`${theme.accent}20`,border:`0.5px solid ${theme.accent}40`}}>
+                      <div style={{position:"absolute",top:-4,left:`${((session.spectrums.sf||0)+3)/6*100}%`,width:10,height:10,borderRadius:"50%",background:theme.text,borderColor:theme.border,borderWidth:"1.5px",borderStyle:"solid",transform:"translateX(-50%)"}}/>
+                    </div>
                   </div>
-                </div>
+                </>):(
+                  <p style={{fontSize:10,color:theme.dimText,fontStyle:"italic"}}>no session review yet</p>
+                )}
               </div>
 
               {/* Terpenes */}
@@ -2385,50 +2423,125 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
 
               {/* Action buttons */}
               <div style={{display:"flex",gap:6,paddingTop:10,marginTop:10,borderTop:`0.5px solid ${theme.accent}30`}}>
-                <button style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:"pointer",textAlign:"center",borderRadius:0,background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text}}>+ NOTE</button>
-                <button style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:"pointer",textAlign:"center",borderRadius:0,background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text}}>+ EXPERIENCE</button>
-                <button style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:"pointer",textAlign:"center",borderRadius:0,background:"rgba(91,138,114,0.1)",border:"1px solid rgba(91,138,114,0.25)",color:"rgba(91,138,114,0.7)"}}>FINISHED</button>
+                <button onClick={()=>{setDetailTab("notes");setAddingNote(true);}} disabled={!isReal} style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:isReal?"pointer":"default",textAlign:"center",borderRadius:0,background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,opacity:isReal?1:0.4}}>+ NOTE</button>
+                <button onClick={()=>{setDetailTab("experiences");setAddingExp(true);}} disabled={!isReal} style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:isReal?"pointer":"default",textAlign:"center",borderRadius:0,background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,opacity:isReal?1:0.4}}>+ EXPERIENCE</button>
+                <button onClick={()=>setFinishing(true)} disabled={!canEdit} style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:canEdit?"pointer":"default",textAlign:"center",borderRadius:0,background:"rgba(91,138,114,0.1)",border:"1px solid rgba(91,138,114,0.25)",color:"rgba(91,138,114,0.7)",opacity:canEdit?1:0.4}}>{cop?.status==="done"?"FINISHED":"FINISHED"}</button>
               </div>
+              {!isReal&&<p style={{fontSize:10,color:theme.dimText,marginTop:8,fontStyle:"italic"}}>finish reviewing this cop to add notes or experiences</p>}
+              {isReal&&cop?.status==="done"&&<p style={{fontSize:10,color:theme.dimText,marginTop:8,fontStyle:"italic"}}>this cop is already finished</p>}
+              {finishing&&(
+                <div style={{marginTop:10,padding:10,background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4}}>
+                  <div style={{fontSize:11,color:theme.text,marginBottom:8}}>would you cop again?</div>
+                  <div style={{display:"flex",gap:5,marginBottom:10}}>
+                    {["Yes","Maybe","No","Never again"].map(o=>(
+                      <span key={o} onClick={()=>setCopAgainChoice(o)} style={{flex:1,padding:"6px 4px",borderRadius:4,fontSize:9,textAlign:"center",cursor:"pointer",background:copAgainChoice===o?copAgainColor(o):"transparent",color:copAgainChoice===o?"#fff":theme.dimText,border:copAgainChoice===o?"none":`0.5px solid ${theme.cardBorder}`}}>{o.toLowerCase()}</span>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                    <span onClick={()=>{setFinishing(false);setCopAgainChoice("");}} style={{padding:"6px 16px",fontSize:11,color:theme.dimText,cursor:"pointer"}}>cancel</span>
+                    <span onClick={confirmFinish} style={{padding:"6px 16px",fontSize:11,background:`${theme.accent}30`,border:`1px solid ${theme.accent}50`,color:theme.text,cursor:"pointer",borderRadius:4}}>confirm</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {detailTab==="notes"&&(
             <div>
               <div style={{fontSize:8,fontWeight:500,color:theme.dimText,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 12px",borderLeft:`2px solid ${theme.accent}`,background:`linear-gradient(90deg,${theme.accent}30,transparent)`,padding:"4px 8px"}}>NOTES</div>
-              {!cop?.notes||cop.notes.length===0?(
+              {isReal&&!addingNote&&<button onClick={()=>setAddingNote(true)} style={{width:"100%",padding:8,fontSize:10,fontFamily:"'DM Mono',monospace",cursor:"pointer",background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,marginBottom:12}}>+ add note</button>}
+              {addingNote&&(
                 <div>
-                  <div style={{background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,minHeight:80,marginBottom:12}}>
-                    <span style={{fontSize:12,color:theme.dimText}}>write your note...</span>
+                  <textarea value={noteDraft} onChange={e=>setNoteDraft(e.target.value)} placeholder="write your note..." rows={3} style={{width:"100%",boxSizing:"border-box",background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,fontSize:12,color:theme.text,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:8}}/>
+                  <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginBottom:12}}>
+                    <span onClick={()=>{setAddingNote(false);setNoteDraft("");}} style={{padding:"6px 16px",fontSize:11,color:theme.dimText,cursor:"pointer"}}>cancel</span>
+                    <span onClick={saveNote} style={{padding:"6px 16px",fontSize:11,background:`${theme.accent}30`,border:`1px solid ${theme.accent}50`,color:theme.text,cursor:"pointer",borderRadius:4}}>save note</span>
                   </div>
-                  <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                    <div style={{padding:"6px 16px",fontSize:11,color:theme.dimText,cursor:"pointer"}}>cancel</div>
-                    <div style={{padding:"6px 16px",fontSize:11,background:`${theme.accent}30`,border:`1px solid ${theme.accent}50`,color:theme.text,cursor:"pointer",borderRadius:4}}>save note</div>
-                  </div>
-                </div>
-              ):(
-                <div>
-                  {cop.notes.map((n,i)=>(
-                    <div key={i} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:theme.cardBg,border:`0.5px solid ${theme.cardBorder}`}}>
-                      <div style={{fontSize:12,color:theme.text,marginBottom:4}}>{n}</div>
-                      <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText}}>JUN 22</div>
-                    </div>
-                  ))}
                 </div>
               )}
+              {(!cop?.notes||cop.notes.length===0)&&!addingNote&&<p style={{fontSize:11,color:theme.dimText,fontStyle:"italic"}}>no notes yet</p>}
+              {(cop?.notes||[]).slice().reverse().map(n=>(
+                <div key={n.id} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:theme.cardBg,border:`0.5px solid ${theme.cardBorder}`}}>
+                  <div style={{fontSize:12,color:theme.text,marginBottom:4}}>{n.text}</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText}}>{n.date}</div>
+                </div>
+              ))}
             </div>
           )}
 
           {detailTab==="experiences"&&(
             <div>
               <div style={{fontSize:8,fontWeight:500,color:theme.dimText,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 12px",borderLeft:`2px solid ${theme.accent}`,background:`linear-gradient(90deg,${theme.accent}30,transparent)`,padding:"4px 8px"}}>EXPERIENCES</div>
-              <p style={{color:theme.dimText,fontSize:11}}>No experiences yet. Click "+ EXPERIENCE" in overview tab to add one.</p>
+              {isReal&&!addingExp&&<button onClick={()=>setAddingExp(true)} style={{width:"100%",padding:8,fontSize:10,fontFamily:"'DM Mono',monospace",cursor:"pointer",background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,marginBottom:12}}>+ log experience</button>}
+              {addingExp&&(
+                <div style={{background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,marginBottom:12}}>
+                  <div style={{display:"flex",gap:5,marginBottom:8}}>
+                    {["indoor","outdoor"].map(s=>(
+                      <span key={s} onClick={()=>setExpDraft({...expDraft,setting:s,bedtime:s==="outdoor"?false:expDraft.bedtime})} style={{padding:"5px 12px",borderRadius:16,fontSize:10,cursor:"pointer",background:expDraft.setting===s?`${theme.accent}30`:"transparent",color:expDraft.setting===s?theme.text:theme.dimText,border:expDraft.setting===s?`0.5px solid ${theme.accent}60`:`0.5px solid ${theme.accent}20`}}>{s}</span>
+                    ))}
+                    {expDraft.setting==="indoor"&&<span onClick={()=>setExpDraft({...expDraft,bedtime:!expDraft.bedtime})} style={{padding:"5px 12px",borderRadius:16,fontSize:10,cursor:"pointer",background:expDraft.bedtime?`${theme.accent}30`:"transparent",color:expDraft.bedtime?theme.text:theme.dimText,border:expDraft.bedtime?`0.5px solid ${theme.accent}60`:`0.5px solid ${theme.accent}20`}}>🌙 bedtime</span>}
+                  </div>
+                  <textarea value={expDraft.text} onChange={e=>setExpDraft({...expDraft,text:e.target.value})} placeholder="what was different this time..." rows={3} style={{width:"100%",boxSizing:"border-box",background:"transparent",border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,fontSize:12,color:theme.text,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:8}}/>
+                  <div style={{marginBottom:8}}><TagSelector categories={VIBE_CATEGORIES} tags={VIBE_TAGS} selected={expDraft.vibeTags} onChange={v=>setExpDraft({...expDraft,vibeTags:v})} color={theme.accent}/></div>
+                  <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                    <span onClick={()=>{setAddingExp(false);setExpDraft({text:"",setting:"indoor",bedtime:false,vibeTags:[]});}} style={{padding:"6px 16px",fontSize:11,color:theme.dimText,cursor:"pointer"}}>cancel</span>
+                    <span onClick={saveExperience} style={{padding:"6px 16px",fontSize:11,background:`${theme.accent}30`,border:`1px solid ${theme.accent}50`,color:theme.text,cursor:"pointer",borderRadius:4}}>save</span>
+                  </div>
+                </div>
+              )}
+              {(!cop?.experiences||cop.experiences.length===0)&&!addingExp&&<p style={{fontSize:11,color:theme.dimText,fontStyle:"italic"}}>no experiences logged yet</p>}
+              {(cop?.experiences||[]).slice().reverse().map(exp=>(
+                <div key={exp.id} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:theme.cardBg,border:`0.5px solid ${theme.cardBorder}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText}}>{exp.date}</span>
+                    <span style={{fontSize:9,padding:"1px 6px",borderRadius:6,background:`${theme.accent}20`,color:theme.dimText}}>{exp.bedtime?"bedtime":exp.setting}</span>
+                  </div>
+                  {exp.note&&<p style={{fontSize:12,color:theme.text,margin:"0 0 4px"}}>{exp.note}</p>}
+                  {exp.vibeTags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3}}>{exp.vibeTags.map(t=><span key={t} style={{fontSize:9,background:`${theme.accent}20`,color:theme.text,padding:"1px 6px",borderRadius:6}}>{t.toLowerCase()}</span>)}</div>}
+                </div>
+              ))}
             </div>
           )}
 
           {detailTab==="mixes"&&(
             <div>
               <div style={{fontSize:8,fontWeight:500,color:theme.dimText,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 12px",borderLeft:`2px solid ${theme.accent}`,background:`linear-gradient(90deg,${theme.accent}30,transparent)`,padding:"4px 8px"}}>MIXES</div>
-              <p style={{color:theme.dimText,fontSize:11}}>No mixes yet. Click "+ EXPERIENCE" to create one.</p>
+
+              {canEdit&&!mixMode&&<button onClick={()=>setMixMode(true)} style={{width:"100%",padding:8,fontSize:10,fontFamily:"'DM Mono',monospace",cursor:"pointer",background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,marginBottom:12}}>+ log a mix</button>}
+
+              {mixMode&&(
+                <div style={{background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,marginBottom:12}}>
+                  <div style={{fontSize:11,color:theme.text,marginBottom:8}}>mix {strain.name} with:</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:10}}>
+                    {onHand.filter(o=>o.strainId!==strain.id).map(o=>(
+                      <span key={o.copId} onClick={()=>setMixWith(strains.find(s=>s.id===o.strainId))} style={{padding:"6px 10px",borderRadius:4,fontSize:11,cursor:"pointer",background:mixWith?.id===o.strainId?`${theme.accent}30`:"transparent",color:mixWith?.id===o.strainId?theme.text:theme.dimText,border:mixWith?.id===o.strainId?`0.5px solid ${theme.accent}60`:`0.5px solid ${theme.cardBorder}`}}>{o.strainName}</span>
+                    ))}
+                    {onHand.filter(o=>o.strainId!==strain.id).length===0&&<p style={{fontSize:10,color:theme.dimText}}>no other on-hand strains to mix with</p>}
+                  </div>
+                  {mixWith&&(<>
+                    <SpectrumSlider left="Couch-locked" right="Active" value={mixSess.sw} onChange={v=>setMixSess({...mixSess,sw:v})} color={theme.accent}/>
+                    <SpectrumSlider left="Dreamy" right="Analytical" value={mixSess.sf} onChange={v=>setMixSess({...mixSess,sf:v})} color={theme.accent}/>
+                    <SpectrumSlider left="Smooth" right="Harsh" value={mixSess.pull} onChange={v=>setMixSess({...mixSess,pull:v})} color={theme.accent}/>
+                    <span onClick={()=>setMixSess({...mixSess,bedtime:!mixSess.bedtime})} style={{display:"inline-block",marginBottom:10,padding:"5px 12px",borderRadius:16,fontSize:10,cursor:"pointer",background:mixSess.bedtime?`${theme.accent}30`:"transparent",color:mixSess.bedtime?theme.text:theme.dimText,border:mixSess.bedtime?`0.5px solid ${theme.accent}60`:`0.5px solid ${theme.accent}20`}}>🌙 bedtime</span>
+                    <div style={{marginBottom:10}}><TagSelector categories={VIBE_CATEGORIES} tags={VIBE_TAGS} selected={mixSess.vibeTags} onChange={v=>setMixSess({...mixSess,vibeTags:v})} color={theme.accent}/></div>
+                    <textarea value={mixSess.notes} onChange={e=>setMixSess({...mixSess,notes:e.target.value})} placeholder="how'd the combo play together..." rows={2} style={{width:"100%",boxSizing:"border-box",background:"transparent",border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,fontSize:12,color:theme.text,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:10}}/>
+                    <div style={{display:"flex",gap:6}}>
+                      <span onClick={()=>{setMixMode(false);setMixWith(null);}} style={{flex:1,textAlign:"center",padding:"6px 4px",fontSize:10,color:theme.dimText,cursor:"pointer",border:`0.5px solid ${theme.cardBorder}`,borderRadius:4}}>cancel</span>
+                      <span onClick={()=>saveMix(true)} style={{flex:1,textAlign:"center",padding:"6px 4px",fontSize:10,background:`${theme.accent}15`,color:theme.text,cursor:"pointer",borderRadius:4}}>rate later</span>
+                      <span onClick={()=>saveMix(false)} style={{flex:1,textAlign:"center",padding:"6px 4px",fontSize:10,background:`${theme.accent}30`,border:`1px solid ${theme.accent}50`,color:theme.text,cursor:"pointer",borderRadius:4}}>save mix</span>
+                    </div>
+                  </>)}
+                </div>
+              )}
+
+              {(!cop?.mixes||cop.mixes.length===0)&&!mixMode&&<p style={{color:theme.dimText,fontSize:11,fontStyle:"italic"}}>no mixes logged yet</p>}
+              {(cop?.mixes||[]).map(m=>(
+                <div key={m.id} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:theme.cardBg,border:`0.5px solid ${theme.cardBorder}`}}>
+                  <div style={{fontSize:12,color:theme.text}}>{strain.name} × {m.withStrain}</div>
+                  {m.status==="queued"&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText,marginTop:2}}>queued for rating</div>}
+                  {m.notes&&<div style={{fontSize:11,color:theme.dimText,marginTop:2}}>{m.notes}</div>}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -2520,8 +2633,172 @@ function DesktopPlaceholder({page,strainCount,onHandCount,reupCount}){
   );
 }
 
+function DesktopLibraryPage({strains,legacyStrains,onSelectStrain}){
+  const[libSearch,setLibSearch]=useState("");
+  const[copAgainFilter,setCopAgainFilter]=useState("");
+  const[ratingFilter,setRatingFilter]=useState(0);
+  const[libTab,setLibTab]=useState("strains");
+  const[starredOnly,setStarredOnly]=useState(false);
+  const[collapsedMonths,setCollapsedMonths]=useState({});
+  const[expandedLegacy,setExpandedLegacy]=useState({});
+  const toggleMonth=m=>setCollapsedMonths(prev=>({...prev,[m]:!prev[m]}));
+  const toggleLegacy=id=>setExpandedLegacy(prev=>({...prev,[id]:!prev[id]}));
+  const isNeverAgain=s=>s.cops.some(c=>c.session?.copAgain==="Never again");
+  const getLatestCop=s=>s.cops[s.cops.length-1];
+  const activeStrains=strains.filter(s=>{
+    if(s.legacy)return false;
+    if(starredOnly&&!s.starred)return false;
+    const lc=s.cops[s.cops.length-1];const ls=lc?.session;
+    if(copAgainFilter&&ls?.copAgain!==copAgainFilter)return false;
+    if(ratingFilter&&(!ls||(ls.rating||0)<ratingFilter))return false;
+    if(libSearch){const q=libSearch.toLowerCase();const haystack=[s.name,...(s.parents||[]),...(lc?.terpenes||[]),...(ls?.vibeTags||[]),...(ls?.tasteTags||[]),...(lc?.notes||[]).map(n=>n.text)].join(" ").toLowerCase();if(!haystack.includes(q))return false;}
+    return true;
+  });
+  const monthGroups={};
+  activeStrains.forEach(s=>{
+    const lc=getLatestCop(s);if(!lc)return;
+    const month=lc.date?.replace(/\s+\d+$/,"").trim()||"unknown";
+    if(!monthGroups[month])monthGroups[month]=[];
+    monthGroups[month].push(s);
+  });
+  const monthOrder=Object.keys(monthGroups);
+  const allMixes=strains.flatMap(s=>s.cops.flatMap(c=>(c.mixes||[]).filter(m=>m.status==="reviewed").map(m=>({...m,strainName:s.name,strainId:s.id,copType:c.type}))));
+  const uniqueMixes=[];const seenShared=new Set();
+  allMixes.forEach(m=>{if(m.sharedId&&seenShared.has(m.sharedId))return;if(m.sharedId)seenShared.add(m.sharedId);uniqueMixes.push(m);});
+  const D={bg:"#1A1410",card:"rgba(232,224,212,0.05)",border:"rgba(232,224,212,0.1)",text:"#E8E0D4",muted:"rgba(232,224,212,0.4)",amber:"#D4B888"};
+  const legacyHasContent=l=>!!(l.notes||l.source||l.brand||l.container);
+
+  return(
+    <div style={{flex:1,overflowY:"auto",padding:"32px 36px",color:D.text}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:"rgba(255,255,255,0.9)",marginBottom:4}}>library</div>
+      <p style={{fontSize:12,color:D.muted,marginBottom:20}}>{strains.filter(s=>!s.legacy).length} strains · {uniqueMixes.length} mix{uniqueMixes.length!==1?"es":""} · {legacyStrains.length} legacy</p>
+
+      <div style={{display:"flex",gap:6,marginBottom:20}}>
+        {["strains","mixes","legacy"].map(t=>(
+          <span key={t} onClick={()=>setLibTab(t)} style={{padding:"8px 18px",borderRadius:20,fontSize:12,cursor:"pointer",fontWeight:libTab===t?500:400,background:libTab===t?(t==="mixes"?"#8B6D8B":t==="legacy"?D.amber:"#E8E0D4"):"transparent",color:libTab===t?"#1A1410":D.muted,border:libTab===t?"none":`0.5px solid ${D.border}`}}>{t}</span>
+        ))}
+      </div>
+
+      {libTab==="strains"&&(<>
+        <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="search strains, terpenes, parents..." style={{width:"100%",maxWidth:480,boxSizing:"border-box",background:D.card,borderRadius:8,padding:"10px 14px",fontSize:13,color:D.text,border:`0.5px solid ${D.border}`,fontFamily:"inherit",outline:"none",marginBottom:10}}/>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:20}}>
+          <span onClick={()=>setStarredOnly(!starredOnly)} style={{padding:"5px 12px",borderRadius:20,fontSize:10,cursor:"pointer",background:starredOnly?D.amber:"transparent",color:starredOnly?"#1A1410":D.muted,border:starredOnly?"none":`0.5px solid ${D.border}`}}>⭐ starred</span>
+          {["Yes","Maybe","No","Never again"].map(ca=>(
+            <span key={ca} onClick={()=>setCopAgainFilter(copAgainFilter===ca?"":ca)} style={{padding:"5px 10px",borderRadius:20,fontSize:10,cursor:"pointer",background:copAgainFilter===ca?copAgainColor(ca):"transparent",color:copAgainFilter===ca?"#E8E0D4":D.muted,border:copAgainFilter===ca?"none":`0.5px solid ${D.border}`}}>{ca.toLowerCase()}</span>
+          ))}
+          {[3,4,5].map(r=>(
+            <span key={r} onClick={()=>setRatingFilter(ratingFilter===r?0:r)} style={{padding:"5px 10px",borderRadius:20,fontSize:10,cursor:"pointer",background:ratingFilter===r?D.amber:"transparent",color:ratingFilter===r?"#1A1410":D.muted,border:ratingFilter===r?"none":`0.5px solid ${D.border}`}}>{r}+ ⭐</span>
+          ))}
+        </div>
+
+        {monthOrder.length===0&&<p style={{fontSize:13,color:D.muted}}>no strains logged yet</p>}
+        {monthOrder.map(month=>(
+          <div key={month} style={{marginBottom:28}}>
+            <div onClick={()=>toggleMonth(month)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",marginBottom:collapsedMonths[month]?0:14,borderBottom:`0.5px solid ${D.border}`,paddingBottom:8}}>
+              <p style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:D.amber,margin:0}}>{month}</p>
+              <span style={{fontSize:11,color:D.muted}}>{collapsedMonths[month]?`${monthGroups[month].length} strain${monthGroups[month].length!==1?"s":""}  ▸`:"▾"}</span>
+            </div>
+            {!collapsedMonths[month]&&(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))",gap:10}}>
+                {monthGroups[month].map(s=>{
+                  const lc=getLatestCop(s);const ls=lc?.session;const locked=isNeverAgain(s);
+                  return(
+                    <div key={s.id} onClick={()=>onSelectStrain(s)} style={{display:"flex",gap:12,cursor:"pointer",padding:"12px 14px",borderRadius:8,background:D.card,border:`0.5px solid ${D.border}`}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",marginTop:4,flexShrink:0,background:typeColor(lc?.type),boxShadow:lc?.status==="on-hand"?`0 0 8px ${typeColor(lc?.type)}, 0 0 16px ${typeColor(lc?.type)}80`:`0 0 6px ${typeColor(lc?.type)}40`}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{fontSize:14,fontWeight:500,color:D.text}}>{s.name}</span>
+                            {s.starred&&<span style={{fontSize:12}}>⭐</span>}
+                            {locked&&<span style={{fontSize:10}}>🔒</span>}
+                          </div>
+                          {ls&&<div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=ls.rating} size={12} color={locked?"#C15A4A":"#6B7F5A"}/>)}</div>}
+                        </div>
+                        {lc?.terpenes?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6}}>{lc.terpenes.map(t=><span key={t} style={{fontSize:9,padding:"2px 7px",borderRadius:8,background:`${typeColor(lc.type)}20`,color:typeColor(lc.type)}}>{t.toLowerCase()}</span>)}</div>}
+                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                          {ls&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:`${copAgainColor(ls.copAgain)}30`,color:copAgainColor(ls.copAgain)}}>🔄 {ls.copAgain.toLowerCase()}</span>}
+                          {s.cops.length>1&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:"rgba(212,184,136,0.15)",color:D.amber}}>{s.cops.length} cops</span>}
+                          {s.intent&&<IntentBadge intent={s.intent}/>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+      </>)}
+
+      {libTab==="mixes"&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(320px, 1fr))",gap:10}}>
+          {uniqueMixes.length===0&&<p style={{fontSize:13,color:D.muted}}>no reviewed mixes yet</p>}
+          {uniqueMixes.map(m=>(
+            <div key={m.id} style={{background:"rgba(139,109,139,0.08)",borderRadius:8,padding:14,border:"0.5px solid rgba(139,109,139,0.15)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7}}>
+                <div style={{width:3,height:14,borderRadius:1,background:typeColor(m.primaryType||m.copType)}}/>
+                <span style={{fontSize:13,fontWeight:500,color:"#C4B0C4"}}>{m.primaryStrain||m.strainName}</span>
+                <span style={{fontSize:11,color:D.muted}}>x</span>
+                <div style={{width:3,height:14,borderRadius:1,background:typeColor(m.withType)}}/>
+                <span style={{fontSize:13,fontWeight:500,color:"#C4B0C4"}}>{m.withStrain}</span>
+                <div style={{display:"flex",gap:1,marginLeft:"auto"}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=m.rating} size={11} color="#8B6D8B"/>)}</div>
+              </div>
+              {m.combinedTerpenes&&<div style={{display:"flex",flexWrap:"wrap",gap:2,marginBottom:7}}>{m.combinedTerpenes.map(t=><span key={t} style={{fontSize:9,background:"rgba(139,109,139,0.2)",color:"#C4B0C4",padding:"2px 6px",borderRadius:6}}>{t.toLowerCase()}</span>)}</div>}
+              {m.bedtime&&<span style={{display:"inline-block",fontSize:9,padding:"2px 7px",borderRadius:6,background:"rgba(44,44,74,0.5)",color:"#C9B8F0",marginBottom:7}}>🌙 bedtime</span>}
+              {m.vibeTags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:7}}>{m.vibeTags.map(v=><span key={v} style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:"rgba(139,109,139,0.12)",color:"rgba(196,176,196,0.65)"}}>{v.toLowerCase()}</span>)}</div>}
+              {m.notes&&<p style={{fontSize:11,color:D.muted,margin:"0 0 4px",lineHeight:1.55}}>{m.notes}</p>}
+              <p style={{fontSize:10,color:"rgba(232,224,212,0.25)",margin:0}}>{m.date}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {libTab==="legacy"&&(
+        <div>
+          {["Yes","Maybe","Never again"].map(status=>{
+            const group=legacyStrains.filter(l=>l.copAgain===status).sort((a,b)=>legacyHasContent(b)?1:legacyHasContent(a)?-1:0);
+            if(group.length===0)return null;
+            const isNever=status==="Never again";
+            return(
+              <div key={status} style={{marginBottom:20}}>
+                <p style={{fontSize:10,fontWeight:500,color:D.amber,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 10px"}}>{status==="Yes"?"would cop again":status==="Maybe"?"maybe cop again":"never again"}</p>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))",gap:6}}>
+                  {group.map(l=>{
+                    const hasContent=legacyHasContent(l);
+                    const isOpen=expandedLegacy[l.id];
+                    return(
+                      <div key={l.id} onClick={hasContent&&!isNever?()=>toggleLegacy(l.id):undefined}
+                        style={{background:"rgba(212,184,136,0.06)",borderRadius:8,border:`0.5px solid ${isOpen?"rgba(212,184,136,0.18)":"rgba(212,184,136,0.1)"}`,overflow:"hidden",cursor:hasContent&&!isNever?"pointer":"default",opacity:isNever?0.4:1}}>
+                        <div style={{padding:"11px 14px",display:"flex",alignItems:"center",gap:8}}>
+                          {l.type&&<div style={{width:3,height:16,borderRadius:2,background:typeColor(l.type),flexShrink:0}}/>}
+                          <span style={{fontSize:13,fontWeight:500,color:D.text,flex:1}}>{l.name}</span>
+                          {l.type&&<span style={{fontSize:10,color:D.muted}}>{l.type.toLowerCase()}</span>}
+                          {hasContent&&!isNever&&<span style={{fontSize:10,color:"rgba(232,224,212,0.2)"}}>{isOpen?"▴":"▾"}</span>}
+                        </div>
+                        {isOpen&&hasContent&&(
+                          <div style={{borderTop:"0.5px solid rgba(212,184,136,0.08)",padding:"10px 14px 13px",display:"flex",flexDirection:"column",gap:7}}>
+                            {(l.brand||l.source||l.container)&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                              {l.brand&&<span style={{fontSize:12,fontWeight:500,color:"rgba(212,184,136,0.85)"}}>🏷️ {l.brand}</span>}
+                              {(l.source||l.container)&&<span style={{fontSize:10,color:"rgba(212,184,136,0.5)"}}>{[l.source?.toLowerCase(),l.container?.toLowerCase()].filter(Boolean).join(" · ")}</span>}
+                            </div>}
+                            {l.notes&&<p style={{fontSize:12,color:"rgba(232,224,212,0.8)",margin:0,lineHeight:1.55}}>{l.notes}</p>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DesktopShell(){
-  const{synced,strains,legacyStrains,onHand,coppedEntries,setCoppedEntries,reups,setReups,finishedReups,savedComparisons,savedTips}=useCloudData();
+  const{synced,strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,savedTips}=useCloudData();
   const[page,setPage]=useState("home");
   const[stashOpen,setStashOpen]=useState(false);
   const[selectedStrain,setSelectedStrain]=useState(null);
@@ -2541,6 +2818,51 @@ function DesktopShell(){
     setDetailTab("overview");
   };
 
+  const handleAddNote=(strainId,copId,text)=>{
+    if(!text.trim())return;
+    const note={id:Date.now(),date:today(),text:text.trim()};
+    setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:[...(c.notes||[]),note]})};}));
+  };
+
+  const handleAddExperience=(strainId,copId,text,setting,bedtime,vibeTags)=>{
+    if(!text.trim()&&(!vibeTags||vibeTags.length===0))return;
+    const exp={id:Date.now(),date:today(),setting,bedtime,note:text.trim(),vibeTags:[...vibeTags],mixedWith:null};
+    setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,experiences:[...(c.experiences||[]),exp]})};}));
+  };
+
+  const handleFinishCop=(item,copAgainChoice)=>{
+    const newOnHand=onHand.filter(o=>o.copId!==item.copId);
+    const newStrains=strains.map(s=>s.id!==item.strainId?s:{...s,cops:s.cops.map(c=>c.id!==item.copId?c:{...c,status:"done",finishedDate:today(),session:{...c.session,copAgain:copAgainChoice||c.session?.copAgain}})});
+    setOnHand(newOnHand);setStrains(newStrains);
+    const reupForCop=reups.find(r=>r.copIds.includes(item.copId));
+    if(reupForCop){
+      const allDone=reupForCop.copIds.every(cId=>{const c=newStrains.flatMap(s=>s.cops).find(cc=>cc.id===cId);return c?.status==="done";});
+      const noPending=(reupForCop.coppedIds||[]).length===0;
+      if(allDone&&noPending){
+        const fr={...reupForCop,closed:true,closedDate:today(),strainNames:reupForCop.copIds.map(cId=>{const strain=newStrains.find(s=>s.cops.some(c=>c.id===cId));return strain?.name;}).filter(Boolean)};
+        const allAssignedNumbers=[...finishedReups,...reups].map(r=>r.number||0);
+        const nextNum=reupForCop.number||(allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1);
+        setFinishedReups([{...fr,number:nextNum},...finishedReups]);
+        setReups(reups.filter(r=>r.id!==reupForCop.id));
+      }
+    }
+  };
+
+  const handleCreateMix=(strain,cop,mixWith,mixSess,rateLater)=>{
+    const mwCop=mixWith.cops[mixWith.cops.length-1];
+    const ct=[...new Set([...(cop.terpenes||[]),...(mwCop?.terpenes||[])])];
+    const cTaste=[...new Set([...(cop.session?.tasteTags||[]),...(mwCop?.session?.tasteTags||[])])];
+    const mixSharedId=Date.now();
+    const me={id:mixSharedId,sharedId:mixSharedId,withStrain:mixWith.name,withStrainId:mixWith.id,primaryStrain:strain.name,primaryStrainId:strain.id,primaryType:cop.type,withType:mwCop?.type,status:rateLater?"queued":"reviewed",rating:mixSess.rating,spectrums:{sw:mixSess.sw,sf:mixSess.sf},pull:mixSess.pull,bedtime:mixSess.bedtime,vibeTags:[...mixSess.vibeTags],combinedTerpenes:ct,combinedTaste:cTaste,notes:mixSess.notes,date:today()};
+    const mirror={...me,id:mixSharedId+1,withStrain:strain.name,withStrainId:strain.id,primaryStrain:mixWith.name,primaryStrainId:mixWith.id,primaryType:mwCop?.type,withType:cop.type};
+    if(rateLater)setMixQueue(prev=>[{...me,copId:cop.id},...prev]);
+    setStrains(prev=>prev.map(s=>{
+      if(s.id===strain.id)return{...s,cops:s.cops.map(cc=>cc.id!==cop.id?cc:{...cc,mixes:[...(cc.mixes||[]),me]})};
+      if(s.id===mixWith.id)return{...s,cops:s.cops.map(cc=>cc.id!==mwCop?.id?cc:{...cc,mixes:[...(cc.mixes||[]),mirror]})};
+      return s;
+    }));
+  };
+
   const bg=stashOpen?"#120D06":(DESKTOP_BG[page]||"#120D06");
   const strainCount=strains.length;
   const onHandCount=onHand.length;
@@ -2555,6 +2877,8 @@ function DesktopShell(){
           <DesktopTopBar page={page}/>
           {page==="home"
             ?<DesktopHomePage strains={strains} legacyStrains={legacyStrains} onHand={onHand} coppedEntries={coppedEntries} setCoppedEntries={setCoppedEntries} reups={reups} setReups={setReups} finishedReups={finishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
+            :page==="library"
+            ?<DesktopLibraryPage strains={strains} legacyStrains={legacyStrains} onSelectStrain={handleSelectStrain}/>
             :<DesktopPlaceholder page={page} strainCount={strainCount} onHandCount={onHandCount} reupCount={reupCount}/>}
         </div>
       )}
@@ -2572,11 +2896,17 @@ function DesktopShell(){
 
       {/* Detail window overlay */}
       <StrainDetailWindow
+        key={selectedStrain?.id||"none"}
         selectedStrain={selectedStrain}
         detailTab={detailTab}
         setDetailTab={setDetailTab}
         onClose={()=>setSelectedStrain(null)}
         strains={strains}
+        onHand={onHand}
+        onAddNote={handleAddNote}
+        onAddExperience={handleAddExperience}
+        onFinishCop={handleFinishCop}
+        onCreateMix={handleCreateMix}
       />
     </div>
   );
