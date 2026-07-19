@@ -11,7 +11,7 @@ const supabase=createClient(SB_URL,SB_KEY);
 /* ═══════════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════════ */
-const TERPENES=["Myrcene","Limonene","Caryophyllene","Linalool","Pinene","Humulene","Terpinolene","Ocimene","Bisabolol","Valencene","Nerolidol","Guaiol","Camphene","Geraniol","Eucalyptol"];
+const TERPENES=["Myrcene","Limonene","Caryophyllene","Linalool","Pinene","Humulene","Terpinolene","Ocimene","Bisabolol","Valencene","Nerolidol","Guaiol","Camphene","Geraniol","Eucalyptol","P-Cymene"];
 const VIBE_CATEGORIES={"🏃":["Bed mode","Couch-locked","Clean mode","Get things done","Restless"],"🧠":["Deep thinking","Creative flow","Music dive","Zoned out","Laser focused"],"💬":["Conversational","Giggly","Hang out","Quiet mode"],"✨":["Munchies","Music hits different","Body high","Pain relief","Full-body euphoria","Horny","Connected to nature","Dream-inducing","Funny inner-dialogue"],"📊":["Uplifted","Cozy","Sleepy","Energized","Anxious","Paranoid","IDGAF mode"],"👅":["Earthy","Citrus","Pine","Sweet","Gassy","Skunky","Floral","Peppery","Berry","Diesel","Tropical","Minty","Woody","Spicy"]};
 const VIBE_TAGS=Object.values(VIBE_CATEGORIES).flat();
 const today=()=>new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
@@ -2031,12 +2031,34 @@ const FIELD_BOX={background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255
 /* ═══════════════════════════════════════════
    DESKTOP — Home page
    ═══════════════════════════════════════════ */
-function DesktopHomePage({strains,onHand,reups,finishedReups,savedComparisons,savedTips,onNavigate}){
+function DesktopHomePage({strains,legacyStrains,onHand,coppedEntries,setCoppedEntries,reups,setReups,finishedReups,savedComparisons,savedTips,onNavigate}){
   const hasSaved=savedComparisons.length>0||savedTips.length>0;
   const openReups=reups||[];
 
   const[formOpen,setFormOpen]=useState(!hasSaved);
   const[activeReupId,setActiveReupId]=useState(openReups[0]?.id||null);
+  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:""});
+  const[showSugg,setShowSugg]=useState(false);
+
+  const resetCop=()=>setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:""});
+
+  const handleAddReup=()=>{
+    if(openReups.length>=2)return;
+    const newId="r"+Date.now();
+    const allAssignedNumbers=[...finishedReups,...openReups].map(x=>x.number||0);
+    const nextNum=allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1;
+    setReups([...openReups,{id:newId,date:today(),closed:false,copIds:[],coppedIds:[],number:nextNum}]);
+    setActiveReupId(newId);
+  };
+
+  const handleSaveCop=()=>{
+    if(!cop.name.trim())return;
+    const newId=Date.now();
+    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,date:today(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
+    if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
+    resetCop();
+    setFormOpen(false);
+  };
 
   return(
     <div style={{flex:1,position:"relative",overflow:"hidden"}}>
@@ -2081,13 +2103,15 @@ function DesktopHomePage({strains,onHand,reups,finishedReups,savedComparisons,sa
           <>
             <div style={{display:"flex",gap:8,margin:"16px 0"}}>
               {openReups.map(r=>(
-                <RetroWindow key={r.id} title={"RE-UP #"+r.number} badge={activeReupId===r.id?"SELECTED":null}>
-                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.3)"}}>{(r.coppedIds?.length||0)+(r.copIds?.length||0)} STRAIN(S)</div>
-                </RetroWindow>
+                <div key={r.id} onClick={()=>setActiveReupId(r.id)} style={{cursor:"pointer"}}>
+                  <RetroWindow title={"RE-UP #"+r.number} badge={activeReupId===r.id?"SELECTED":null}>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.3)"}}>{(r.coppedIds?.length||0)+(r.copIds?.length||0)} STRAIN(S)</div>
+                  </RetroWindow>
+                </div>
               ))}
-              <div onClick={()=>{}} style={{padding:"10px 16px",border:"2px dashed rgba(232,200,154,0.12)",display:"flex",alignItems:"center",cursor:"pointer"}}>
+              {openReups.length<2&&<div onClick={handleAddReup} style={{padding:"10px 16px",border:"2px dashed rgba(232,200,154,0.12)",display:"flex",alignItems:"center",cursor:"pointer"}}>
                 <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.2)"}}>+ NEW</span>
-              </div>
+              </div>}
             </div>
 
             <RetroWindow title="LOG A NEW COP" badge={activeReupId?"→ SELECTED RE-UP":null} onClose={()=>setFormOpen(false)}>
@@ -2095,35 +2119,82 @@ function DesktopHomePage({strains,onHand,reups,finishedReups,savedComparisons,sa
                 <div style={{flex:1}}>
                   <RetroHeader>intent</RetroHeader>
                   <div style={{display:"flex",gap:5,marginBottom:16}}>
-                    <span style={PILL_ON}>🌙 asleep</span>
-                    <span style={PILL_OFF}>☀️ awake</span>
-                    <span style={PILL_OFF}>🏕️</span>
+                    {[["asleep","🌙 asleep"],["awake","☀️ awake"],["adventure","🏕️ adventure"]].map(([v,label])=>(
+                      <span key={v} onClick={()=>setCop({...cop,intent:cop.intent===v?"":v})} style={cop.intent===v?PILL_ON:PILL_OFF}>{label}</span>
+                    ))}
                   </div>
                   <RetroHeader>strain name</RetroHeader>
-                  <div style={FIELD_BOX}>enter strain name...</div>
+                  <div style={{marginBottom:16}}>
+                    <StrainNameInput
+                      initialValue={cop.name}
+                      strains={strains}
+                      legacyStrains={legacyStrains}
+                      existingStrainId={cop.existingStrainId}
+                      showSugg={showSugg}
+                      setShowSugg={setShowSugg}
+                      onBlur={name=>setCop({...cop,name,existingStrainId:null})}
+                      onSelect={s=>{
+                        if(s.legacy){setCop({...cop,name:s.name,type:s.type||cop.type});}
+                        else{const lc=s.cops[s.cops.length-1];setCop({...cop,name:s.name,type:lc.type||"",lean:lc.lean||"",parent1:s.parents?.[0]||"",parent2:s.parents?.[1]||"",existingStrainId:s.id});}
+                      }}
+                    />
+                  </div>
                   <RetroHeader>type</RetroHeader>
                   <div style={{display:"flex",gap:5}}>
-                    <span style={PILL_OFF}>Sativa</span>
-                    <span style={PILL_OFF}>Hybrid</span>
-                    <span style={PILL_OFF}>Indica</span>
+                    {["Sativa","Hybrid","Indica"].map(t=>(
+                      <span key={t} onClick={()=>setCop({...cop,type:t,lean:""})} style={cop.type===t?PILL_ON:PILL_OFF}>{t}</span>
+                    ))}
                   </div>
+                  {cop.type==="Hybrid"&&<div style={{display:"flex",gap:5,marginTop:8}}>
+                    {["Sativa-lean","Indica-lean","Balanced"].map(l=>(
+                      <span key={l} onClick={()=>setCop({...cop,lean:l})} style={{...(cop.lean===l?PILL_ON:PILL_OFF),fontSize:10}}>{l}</span>
+                    ))}
+                  </div>}
                 </div>
                 <div style={{flex:1}}>
                   <RetroHeader>amount</RetroHeader>
                   <div style={{display:"flex",gap:5,marginBottom:16}}>
-                    <span style={PILL_OFF}>⅛</span>
-                    <span style={PILL_OFF}>¼</span>
-                    <span style={PILL_OFF}>½</span>
-                    <span style={PILL_OFF}>oz</span>
+                    {[["8th","⅛"],["quarter","¼"],["half","½"],["oz","oz"]].map(([v,label])=>(
+                      <span key={v} onClick={()=>setCop({...cop,amount:cop.amount===v?"":v})} style={cop.amount===v?PILL_ON:PILL_OFF}>{label}</span>
+                    ))}
                   </div>
                   <RetroHeader>terpenes</RetroHeader>
-                  <div style={FIELD_BOX}>select terpenes...</div>
+                  <div style={{marginBottom:16}}>
+                    <TerpeneSelector selected={cop.terpenes} onChange={t=>setCop({...cop,terpenes:t})}/>
+                  </div>
                   <RetroHeader>source</RetroHeader>
-                  <div style={FIELD_BOX}>dispensary name...</div>
+                  <div style={{display:"flex",gap:5,marginBottom:8}}>
+                    {["TL","Dispensary"].map(s=>(
+                      <span key={s} onClick={()=>setCop({...cop,source:s,container:"",brand:""})} style={cop.source===s?PILL_ON:PILL_OFF}>{s}</span>
+                    ))}
+                  </div>
+                  {cop.source==="Dispensary"&&(<>
+                    <div style={{display:"flex",gap:5,marginBottom:8}}>
+                      {["Bag","Jar"].map(c=>(
+                        <span key={c} onClick={()=>setCop({...cop,container:c})} style={{...(cop.container===c?PILL_ON:PILL_OFF),fontSize:10}}>{c}</span>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",gap:5,marginBottom:8}}>
+                      {["Indoor grown","Greenhouse grown","Outdoor grown"].map(g=>(
+                        <span key={g} onClick={()=>setCop({...cop,growType:g})} style={{...(cop.growType===g?PILL_ON:PILL_OFF),fontSize:10}}>{g}</span>
+                      ))}
+                    </div>
+                    <input value={cop.brand} onChange={e=>setCop({...cop,brand:e.target.value})} placeholder="brand (optional)" style={{...FIELD_BOX,width:"100%",boxSizing:"border-box",outline:"none",fontFamily:"inherit"}}/>
+                  </>)}
                 </div>
               </div>
+              {!cop.existingStrainId&&(
+                <div style={{marginTop:8}}>
+                  <RetroHeader>parent strains (optional)</RetroHeader>
+                  {!cop.unknownLineage&&<div style={{display:"flex",gap:8,marginBottom:8}}>
+                    <input value={cop.parent1} onChange={e=>setCop({...cop,parent1:e.target.value})} placeholder="parent 1" style={{...FIELD_BOX,flex:1,marginBottom:0,outline:"none",fontFamily:"inherit"}}/>
+                    <input value={cop.parent2} onChange={e=>setCop({...cop,parent2:e.target.value})} placeholder="parent 2" style={{...FIELD_BOX,flex:1,marginBottom:0,outline:"none",fontFamily:"inherit"}}/>
+                  </div>}
+                  <span onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:""})} style={{...(cop.unknownLineage?PILL_ON:PILL_OFF),fontSize:10}}>unknown lineage{cop.unknownLineage?" ✓":""}</span>
+                </div>
+              )}
               <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-                <button style={{padding:"10px 24px",background:"rgba(255,255,255,0.1)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:"rgba(255,255,255,0.8)",fontSize:12,fontFamily:"inherit",cursor:"pointer"}}>save cop</button>
+                <button onClick={handleSaveCop} disabled={!cop.name.trim()} style={{padding:"10px 24px",background:cop.name.trim()?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:cop.name.trim()?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"inherit",cursor:cop.name.trim()?"pointer":"default"}}>save cop</button>
               </div>
             </RetroWindow>
           </>
@@ -2136,32 +2207,31 @@ function DesktopHomePage({strains,onHand,reups,finishedReups,savedComparisons,sa
 /* ═══════════════════════════════════════════
    STASH SIDEBAR OVERLAY (Desktop)
    ═══════════════════════════════════════════ */
-function StashSidebar({stashOpen,setStashOpen,strains,onHand,finishedReups,onSelectStrain}){
+function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finishedReups,onSelectStrain}){
   if(!stashOpen)return null;
-  const needsReview=strains.filter(s=>s.needsReview===true);
   const getTypeColor=t=>({"Sativa":"#C9A84C","Indica":"#7B6B9E","Hybrid":"#6B7F5A"}[t]||"#8C7E6A");
+  const daysSince=dateStr=>{
+    if(!dateStr)return null;
+    const d=new Date(dateStr);
+    if(isNaN(d.getTime()))return null;
+    return Math.max(0,Math.floor((Date.now()-d.getTime())/86400000));
+  };
 
-  const StrainCard=({strain,status})=>{
-    const isCurrent=onHand.some(oh=>oh.strainId===strain.id&&oh.status==="viewing");
-    const type=strain.type||"Unknown";
+  const StrainCard=({name,type,meta,onClick})=>{
     const typeColor=getTypeColor(type);
-
     return(
-      <div onClick={()=>onSelectStrain(strain)}
-        style={{padding:"8px 10px",borderRadius:4,marginBottom:4,position:"relative",overflow:"hidden",background:isCurrent?"rgba(30,20,50,0.8)":"rgba(10,8,5,0.75)",border:isCurrent?`1.5px solid rgba(139,109,180,0.35)`:`1.5px solid rgba(91,138,114,0.18)`,cursor:"pointer"}}>
-        <div style={{position:"absolute",top:0,left:0,right:0,height:"1.5px",background:`linear-gradient(90deg,${typeColor}40,transparent)`}}/>
-        <div style={{fontSize:11,color:isCurrent?"rgba(196,184,216,0.95)":"rgba(255,255,255,0.88)",fontWeight:isCurrent?500:400}}>
-          {strain.name}
-        </div>
-        {isCurrent&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(196,184,216,0.5)",marginTop:2}}>VIEWING · {type.toUpperCase()} · DAY {Math.floor(Math.random()*14)+1}</div>}
-        {!isCurrent&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(255,255,255,0.3)",marginTop:2}}>{type.toUpperCase()} · {status}</div>}
+      <div onClick={onClick}
+        style={{padding:"12px 14px",borderRadius:6,marginBottom:6,position:"relative",overflow:"hidden",background:"rgba(10,8,5,0.75)",border:"1.5px solid rgba(91,138,114,0.18)",cursor:"pointer"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:`linear-gradient(90deg,${typeColor}50,transparent)`}}/>
+        <div style={{fontSize:15,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{name}</div>
+        <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:3}}>{meta}</div>
       </div>
     );
   };
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:100,display:"flex",pointerEvents:"auto"}}>
-      <div style={{width:280,flexShrink:0,position:"relative",background:"#081A08",borderRight:"0.5px solid rgba(232,200,154,0.08)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{width:"30vw",minWidth:340,maxWidth:560,flexShrink:0,position:"relative",background:"#081A08",borderRight:"0.5px solid rgba(232,200,154,0.08)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {/* Botanical background SVG pattern */}
         <svg style={{position:"absolute",inset:0,width:"100%",height:"100%"}} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 520" preserveAspectRatio="xMidYMid slice">
           <rect fill="#081A08"/>
@@ -2175,42 +2245,55 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,finishedReups,onSel
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.72)"}}/>
 
         {/* Content */}
-        <div style={{position:"relative",padding:"16px 14px 12px",flex:1,overflowY:"auto",zIndex:1}}>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:"#E8C89A",letterSpacing:1,marginBottom:12}}>cLOUD</div>
+        <div style={{position:"relative",padding:"26px 24px 18px",flex:1,overflowY:"auto",zIndex:1}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,color:"#E8C89A",letterSpacing:1,marginBottom:20}}>cLOUD</div>
 
           {/* Stash header */}
-          <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",background:"rgba(58,107,42,0.15)",border:"1.5px solid rgba(58,107,42,0.3)",borderRadius:8,marginBottom:16}}>
-            <span style={{fontSize:13,color:"rgba(140,200,140,0.8)"}}>◈</span>
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(140,200,140,0.8)"}}>STASH</span>
-            <span onClick={()=>setStashOpen(false)} style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"rgba(140,200,140,0.4)",marginLeft:"auto",cursor:"pointer"}}>✕</span>
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"rgba(58,107,42,0.15)",border:"1.5px solid rgba(58,107,42,0.3)",borderRadius:8,marginBottom:22}}>
+            <span style={{fontSize:16,color:"rgba(140,200,140,0.8)"}}>◈</span>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:"rgba(140,200,140,0.8)"}}>STASH</span>
+            <span onClick={()=>setStashOpen(false)} style={{fontFamily:"'DM Mono',monospace",fontSize:13,color:"rgba(140,200,140,0.4)",marginLeft:"auto",cursor:"pointer"}}>✕</span>
           </div>
 
           {/* Needs Review */}
-          <div style={{padding:"4px 8px",borderRadius:"0 4px 4px 0",marginBottom:8,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(139,109,139,0.2),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(139,109,139,0.5)"}}>
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,color:"rgba(139,109,139,0.7)"}}>NEEDS REVIEW · {needsReview.length}</span>
+          <div style={{padding:"6px 10px",borderRadius:"0 4px 4px 0",marginBottom:10,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(139,109,139,0.2),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(139,109,139,0.5)"}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,letterSpacing:1,color:"rgba(139,109,139,0.7)"}}>NEEDS REVIEW · {coppedEntries.length}</span>
           </div>
-          {needsReview.map(s=><StrainCard key={s.id} strain={s} status={`JUN ${Math.floor(Math.random()*30)+1}`}/>)}
+          {coppedEntries.map(e=>(
+            <StrainCard key={e.id} name={e.strainName} type={e.type}
+              meta={`${(e.type||"unknown").toUpperCase()} · logged ${e.date||"—"}`}
+              onClick={()=>onSelectStrain({id:e.id,name:e.strainName,type:e.type,cops:[{id:e.id,type:e.type,lean:e.lean,terpenes:e.terpenes||[],date:e.date,notes:e.firstNotes?[e.firstNotes]:[],experiences:[],mixes:[]}]})}
+            />
+          ))}
 
           {/* On Hand */}
-          <div style={{padding:"4px 8px",borderRadius:"0 4px 4px 0",marginBottom:8,marginTop:14,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(91,138,114,0.2),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(91,138,114,0.5)"}}>
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,color:"rgba(91,138,114,0.8)"}}>ON HAND · {onHand.length}</span>
+          <div style={{padding:"6px 10px",borderRadius:"0 4px 4px 0",marginBottom:10,marginTop:20,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(91,138,114,0.2),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(91,138,114,0.5)"}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,letterSpacing:1,color:"rgba(91,138,114,0.8)"}}>ON HAND · {onHand.length}</span>
           </div>
           {onHand.map(oh=>{
             const strain=strains.find(s=>s.id===oh.strainId);
-            return strain?<StrainCard key={oh.id} strain={strain} status={`DAY ${Math.floor(Math.random()*30)+1}`}/>:null;
+            if(!strain)return null;
+            const days=daysSince(oh.date);
+            const type=oh.type||strain.type;
+            return(
+              <StrainCard key={oh.copId||oh.strainId} name={strain.name} type={type}
+                meta={`${(type||"unknown").toUpperCase()}${days!==null?` · day ${days}`:""}`}
+                onClick={()=>onSelectStrain(strain)}
+              />
+            );
           })}
 
           {/* Finished Re-ups */}
-          <div style={{padding:"4px 8px",borderRadius:"0 4px 4px 0",marginBottom:8,marginTop:14,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(232,200,154,0.12),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(232,200,154,0.3)"}}>
-            <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,color:"rgba(232,200,154,0.55)"}}>FINISHED RE-UPS</span>
+          <div style={{padding:"6px 10px",borderRadius:"0 4px 4px 0",marginBottom:10,marginTop:20,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(232,200,154,0.12),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(232,200,154,0.3)"}}>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,letterSpacing:1,color:"rgba(232,200,154,0.55)"}}>FINISHED RE-UPS</span>
           </div>
-          {finishedReups.slice(0,2).map((rup,i)=>(
-            <div key={rup.id} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:"rgba(10,8,5,0.65)",border:"1.5px solid rgba(232,200,154,0.08)"}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}>
-                <span style={{fontSize:10,color:"rgba(232,200,154,0.6)"}}>#7</span>
-                <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.25)"}}>JUN 28</span>
+          {finishedReups.slice(0,2).map(rup=>(
+            <div key={rup.id} style={{padding:"12px 14px",borderRadius:6,marginBottom:8,background:"rgba(10,8,5,0.65)",border:"1.5px solid rgba(232,200,154,0.08)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:14,color:"rgba(232,200,154,0.7)"}}>re-up #{rup.number||"?"}</span>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(232,200,154,0.3)"}}>{rup.closedDate||rup.date||""}</span>
               </div>
-              <div style={{fontSize:9,color:"rgba(232,200,154,0.35)",marginTop:2}}>Re-up #{rup.number||i+1}</div>
+              <div style={{fontSize:11,color:"rgba(232,200,154,0.4)",marginTop:3}}>{(rup.strainNames||[]).join(", ")}</div>
             </div>
           ))}
 
@@ -2438,7 +2521,7 @@ function DesktopPlaceholder({page,strainCount,onHandCount,reupCount}){
 }
 
 function DesktopShell(){
-  const{synced,strains,onHand,reups,finishedReups,savedComparisons,savedTips}=useCloudData();
+  const{synced,strains,legacyStrains,onHand,coppedEntries,setCoppedEntries,reups,setReups,finishedReups,savedComparisons,savedTips}=useCloudData();
   const[page,setPage]=useState("home");
   const[stashOpen,setStashOpen]=useState(false);
   const[selectedStrain,setSelectedStrain]=useState(null);
@@ -2471,7 +2554,7 @@ function DesktopShell(){
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <DesktopTopBar page={page}/>
           {page==="home"
-            ?<DesktopHomePage strains={strains} onHand={onHand} reups={reups} finishedReups={finishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
+            ?<DesktopHomePage strains={strains} legacyStrains={legacyStrains} onHand={onHand} coppedEntries={coppedEntries} setCoppedEntries={setCoppedEntries} reups={reups} setReups={setReups} finishedReups={finishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
             :<DesktopPlaceholder page={page} strainCount={strainCount} onHandCount={onHandCount} reupCount={reupCount}/>}
         </div>
       )}
@@ -2482,6 +2565,7 @@ function DesktopShell(){
         setStashOpen={setStashOpen}
         strains={strains}
         onHand={onHand}
+        coppedEntries={coppedEntries}
         finishedReups={finishedReups}
         onSelectStrain={handleSelectStrain}
       />
