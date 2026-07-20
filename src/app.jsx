@@ -938,7 +938,7 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
 /* ═══════════════════════════════════════════
    INSIGHTS PAGE
    ═══════════════════════════════════════════ */
-function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSaved}){
+function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSaved,desktopPanel=false}){
   const[profileOpen,setProfileOpen]=useState(false);
   const[expandedPinned,setExpandedPinned]=useState({});
   const[expandedMix,setExpandedMix]=useState(null);
@@ -1220,61 +1220,67 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
   };
 
   // Profile page view
-  if(profileOpen&&profileOpen!=="you"){const pId=profileOpen;return(<div style={{background:IS.bg,minHeight:"100vh",color:IS.text}}>
-    <div style={{background:IS.darkBg,padding:"12px 16px",borderBottom:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><span style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:"#E8D9B8"}}>insights</span><span style={{fontSize:9,color:"rgba(212,184,136,0.5)",letterSpacing:2,textTransform:"uppercase",marginLeft:7}}>by cLOUD</span></div></div>
-    <div style={{background:IS.paper,padding:"10px 14px",borderBottom:`1px solid ${IS.border}`,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}} onClick={()=>setProfileOpen(false)}><span style={{fontSize:13,color:IS.amber}}>←</span><span style={{fontSize:11,color:IS.amber,fontWeight:500}}>back to feed</span></div>
-    <div style={{background:IS.paper,padding:"14px 16px 0",borderBottom:`1px solid ${IS.border}`}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-        <div style={{width:52,height:52,borderRadius:"50%",background:IS.darkBg,border:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{profileEmojis[pId]}</div>
-        <div><p style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:IS.text,margin:"0 0 1px"}}>{profileTitles[pId].slice(1)}</p><p style={{fontSize:10,color:IS.amber,margin:"0 0 3px",fontWeight:500}}>{profileTitles[pId]}</p><p style={{fontSize:10,color:IS.muted,margin:0}}>{profileTaglines[pId]}</p></div>
-      </div>
-    </div>
-    <div style={{padding:"14px 16px 0",maxWidth:480,margin:"0 auto"}}>{profileContent[pId]}</div>
-    <div style={{background:IS.darkBg,padding:"6px 14px",borderBottom:`1px solid #2E2010`,marginTop:0}}><span style={{fontSize:9,fontWeight:500,color:IS.amberLight,letterSpacing:0.5,textTransform:"uppercase"}}>posts</span></div>
-    {feedPosts.filter(p=>p.id===pId).map(p=><PostCard key={p.id} post={p} showDismissed={true}/>)}
-    {feedPosts.filter(p=>p.id===pId).length===0&&<div style={{padding:"20px 16px",textAlign:"center"}}><p style={{fontSize:12,color:IS.muted}}>no posts yet</p></div>}
-  </div>);}
-
-  // Your profile page
-  if(profileOpen==="you"){return(<div style={{background:IS.bg,minHeight:"100vh",color:IS.text}}>
-    <div style={{background:IS.darkBg,padding:"12px 16px",borderBottom:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><span style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:"#E8D9B8"}}>insights</span><span style={{fontSize:9,color:"rgba(212,184,136,0.5)",letterSpacing:2,textTransform:"uppercase",marginLeft:7}}>by cLOUD</span></div></div>
-    <div style={{background:IS.paper,padding:"10px 14px",borderBottom:`1px solid ${IS.border}`,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}} onClick={()=>setProfileOpen(false)}><span style={{fontSize:13,color:IS.amber}}>←</span><span style={{fontSize:11,color:IS.amber,fontWeight:500}}>back to feed</span></div>
-    <div style={{background:IS.paper,padding:"14px 16px 0",borderBottom:`1px solid ${IS.border}`}}>
-      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
-        <div style={{width:62,height:62,borderRadius:"50%",background:IS.darkBg,border:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Playfair Display',serif",fontSize:24,color:IS.amberLight,flexShrink:0}}>L</div>
-        <div><p style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:IS.text,margin:"0 0 2px"}}>Leonna</p><p style={{fontSize:11,color:IS.amber,margin:"0 0 3px",fontWeight:500}}>cLOUD V2</p><p style={{fontSize:10,color:IS.muted,margin:0}}>{strains.length} strains tracked · hybrid loyalist</p></div>
-      </div>
-      <div style={{display:"flex",gap:0,border:`1px solid ${IS.border}`,borderRadius:9,overflow:"hidden"}}>
-        {[{n:totalSessions,l:"sessions"},{n:avgRating,l:"avg rating",s:"out of 5"},{n:`${copAgainPct}%`,l:"cop again",s:`${copAgainYes} of ${totalSessions}`}].map((st,i)=><div key={i} style={{flex:1,padding:"9px 6px",textAlign:"center",borderRight:i<2?`1px solid ${IS.border}`:"none"}}><p style={{fontFamily:"'Playfair Display',serif",fontSize:17,color:IS.amberLight,margin:0}}>{st.n}</p><p style={{fontSize:9,color:IS.muted,margin:"2px 0 0"}}>{st.l}</p>{st.s&&<p style={{fontSize:8,color:"#B8A88A",margin:"1px 0 0"}}>{st.s}</p>}</div>)}
-      </div>
-    </div>
-    <div style={{background:IS.darkBg,padding:"6px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid #2E2010`}}><span style={{fontSize:9,fontWeight:500,color:IS.amberLight,letterSpacing:0.5,textTransform:"uppercase"}}>🔖 saved insights</span><span style={{fontSize:9,color:"rgba(212,184,136,0.4)"}}>{saved.length} saved</span></div>
-    <div style={{padding:"0 0 40px",maxWidth:480,margin:"0 auto"}}>
-      {saved.length===0&&<div style={{padding:"28px 20px",textAlign:"center"}}><p style={{fontSize:28,margin:"0 0 10px"}}>🔖</p><p style={{fontSize:13,color:IS.muted}}>nothing saved yet</p><p style={{fontSize:11,color:"#B8A88A",marginTop:5}}>tap ··· on any post to save it here</p></div>}
-      {saved.map((sp,i)=><div key={i} style={{background:IS.postBg,borderBottom:`1px solid ${IS.border}`,padding:"11px 14px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-          <div style={{width:26,height:26,borderRadius:"50%",background:IS.darkBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0,border:`1px solid ${IS.border}`}}>{sp.emoji}</div>
-          <div><p style={{fontSize:11,fontWeight:600,color:profileColors[sp.id]||IS.amber,margin:0}}>{sp.account}</p><p style={{fontSize:9,color:IS.muted,margin:0}}>{sp.tagline}</p></div>
-          <span style={{fontSize:9,color:IS.muted,marginLeft:"auto"}}>{sp.savedAt}</span>
+  const renderProfileView=()=>{
+    if(!profileOpen)return null;
+    if(profileOpen!=="you"){const pId=profileOpen;return(<div style={{background:IS.bg,color:IS.text}}>
+      {!desktopPanel&&<div style={{background:IS.darkBg,padding:"12px 16px",borderBottom:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><span style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:"#E8D9B8"}}>insights</span><span style={{fontSize:9,color:"rgba(212,184,136,0.5)",letterSpacing:2,textTransform:"uppercase",marginLeft:7}}>by cLOUD</span></div></div>}
+      <div style={{background:IS.paper,padding:"10px 14px",borderBottom:`1px solid ${IS.border}`,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}} onClick={()=>setProfileOpen(false)}><span style={{fontSize:13,color:IS.amber}}>←</span><span style={{fontSize:11,color:IS.amber,fontWeight:500}}>back to feed</span></div>
+      <div style={{background:IS.paper,padding:"14px 16px 0",borderBottom:`1px solid ${IS.border}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+          <div style={{width:52,height:52,borderRadius:"50%",background:IS.darkBg,border:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{profileEmojis[pId]}</div>
+          <div><p style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:IS.text,margin:"0 0 1px"}}>{profileTitles[pId].slice(1)}</p><p style={{fontSize:10,color:IS.amber,margin:"0 0 3px",fontWeight:500}}>{profileTitles[pId]}</p><p style={{fontSize:10,color:IS.muted,margin:0}}>{profileTaglines[pId]}</p></div>
         </div>
-        <p style={{fontSize:11.5,color:IS.text,lineHeight:1.5,margin:"0 0 6px"}}>{sp.summaryText}</p>
-        <button onClick={()=>unsave(sp.id)} style={{fontSize:9,color:"#B8A88A",background:"none",border:"none",fontFamily:"inherit",cursor:"pointer",padding:0}}>remove from saved</button>
-      </div>)}
-    </div>
-    <div style={{background:IS.darkBg,padding:"6px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid #2E2010`}}><span style={{fontSize:9,fontWeight:500,color:IS.amberLight,letterSpacing:0.5,textTransform:"uppercase"}}>following</span><span style={{fontSize:9,color:"rgba(212,184,136,0.4)"}}>{Object.keys(profileTitles).length} accounts</span></div>
-    <div style={{padding:"0 0 40px"}}>
-      {Object.keys(profileTitles).map(pId=><div key={pId} onClick={()=>setProfileOpen(pId)} style={{background:IS.postBg,borderBottom:`1px solid ${IS.border}`,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-        <div style={{width:32,height:32,borderRadius:"50%",background:IS.darkBg,border:`1px solid ${IS.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{profileEmojis[pId]}</div>
-        <div style={{flex:1}}>
-          <p style={{fontSize:12,fontWeight:600,color:profileColors[pId],margin:0}}>{profileTitles[pId].slice(1)}</p>
-          <p style={{fontSize:9,color:IS.muted,margin:"1px 0 0"}}>{profileTaglines[pId]}</p>
-        </div>
-        <span style={{fontSize:11,color:"rgba(212,184,136,0.3)"}}>→</span>
-      </div>)}
-    </div>
-  </div>);}
+      </div>
+      <div style={{padding:"14px 16px 0",maxWidth:480,margin:"0 auto"}}>{profileContent[pId]}</div>
+      <div style={{background:IS.darkBg,padding:"6px 14px",borderBottom:`1px solid #2E2010`,marginTop:0}}><span style={{fontSize:9,fontWeight:500,color:IS.amberLight,letterSpacing:0.5,textTransform:"uppercase"}}>posts</span></div>
+      {feedPosts.filter(p=>p.id===pId).map(p=><PostCard key={p.id} post={p} showDismissed={true}/>)}
+      {feedPosts.filter(p=>p.id===pId).length===0&&<div style={{padding:"20px 16px",textAlign:"center"}}><p style={{fontSize:12,color:IS.muted}}>no posts yet</p></div>}
+    </div>);}
 
-  return(<div style={{background:IS.bg,minHeight:"100vh",color:IS.text}} onClick={()=>dotsOpen&&setDotsOpen(null)}>
+    // Your profile page
+    return(<div style={{background:IS.bg,color:IS.text}}>
+      {!desktopPanel&&<div style={{background:IS.darkBg,padding:"12px 16px",borderBottom:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><span style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:"#E8D9B8"}}>insights</span><span style={{fontSize:9,color:"rgba(212,184,136,0.5)",letterSpacing:2,textTransform:"uppercase",marginLeft:7}}>by cLOUD</span></div></div>}
+      <div style={{background:IS.paper,padding:"10px 14px",borderBottom:`1px solid ${IS.border}`,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}} onClick={()=>setProfileOpen(false)}><span style={{fontSize:13,color:IS.amber}}>←</span><span style={{fontSize:11,color:IS.amber,fontWeight:500}}>back to feed</span></div>
+      <div style={{background:IS.paper,padding:"14px 16px 0",borderBottom:`1px solid ${IS.border}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
+          <div style={{width:62,height:62,borderRadius:"50%",background:IS.darkBg,border:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Playfair Display',serif",fontSize:24,color:IS.amberLight,flexShrink:0}}>L</div>
+          <div><p style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:IS.text,margin:"0 0 2px"}}>Leonna</p><p style={{fontSize:11,color:IS.amber,margin:"0 0 3px",fontWeight:500}}>cLOUD V2</p><p style={{fontSize:10,color:IS.muted,margin:0}}>{strains.length} strains tracked · hybrid loyalist</p></div>
+        </div>
+        <div style={{display:"flex",gap:0,border:`1px solid ${IS.border}`,borderRadius:9,overflow:"hidden"}}>
+          {[{n:totalSessions,l:"sessions"},{n:avgRating,l:"avg rating",s:"out of 5"},{n:`${copAgainPct}%`,l:"cop again",s:`${copAgainYes} of ${totalSessions}`}].map((st,i)=><div key={i} style={{flex:1,padding:"9px 6px",textAlign:"center",borderRight:i<2?`1px solid ${IS.border}`:"none"}}><p style={{fontFamily:"'Playfair Display',serif",fontSize:17,color:IS.amberLight,margin:0}}>{st.n}</p><p style={{fontSize:9,color:IS.muted,margin:"2px 0 0"}}>{st.l}</p>{st.s&&<p style={{fontSize:8,color:"#B8A88A",margin:"1px 0 0"}}>{st.s}</p>}</div>)}
+        </div>
+      </div>
+      <div style={{background:IS.darkBg,padding:"6px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid #2E2010`}}><span style={{fontSize:9,fontWeight:500,color:IS.amberLight,letterSpacing:0.5,textTransform:"uppercase"}}>🔖 saved insights</span><span style={{fontSize:9,color:"rgba(212,184,136,0.4)"}}>{saved.length} saved</span></div>
+      <div style={{padding:"0 0 40px",maxWidth:480,margin:"0 auto"}}>
+        {saved.length===0&&<div style={{padding:"28px 20px",textAlign:"center"}}><p style={{fontSize:28,margin:"0 0 10px"}}>🔖</p><p style={{fontSize:13,color:IS.muted}}>nothing saved yet</p><p style={{fontSize:11,color:"#B8A88A",marginTop:5}}>tap ··· on any post to save it here</p></div>}
+        {saved.map((sp,i)=><div key={i} style={{background:IS.postBg,borderBottom:`1px solid ${IS.border}`,padding:"11px 14px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <div style={{width:26,height:26,borderRadius:"50%",background:IS.darkBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0,border:`1px solid ${IS.border}`}}>{sp.emoji}</div>
+            <div><p style={{fontSize:11,fontWeight:600,color:profileColors[sp.id]||IS.amber,margin:0}}>{sp.account}</p><p style={{fontSize:9,color:IS.muted,margin:0}}>{sp.tagline}</p></div>
+            <span style={{fontSize:9,color:IS.muted,marginLeft:"auto"}}>{sp.savedAt}</span>
+          </div>
+          <p style={{fontSize:11.5,color:IS.text,lineHeight:1.5,margin:"0 0 6px"}}>{sp.summaryText}</p>
+          <button onClick={()=>unsave(sp.id)} style={{fontSize:9,color:"#B8A88A",background:"none",border:"none",fontFamily:"inherit",cursor:"pointer",padding:0}}>remove from saved</button>
+        </div>)}
+      </div>
+      <div style={{background:IS.darkBg,padding:"6px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid #2E2010`}}><span style={{fontSize:9,fontWeight:500,color:IS.amberLight,letterSpacing:0.5,textTransform:"uppercase"}}>following</span><span style={{fontSize:9,color:"rgba(212,184,136,0.4)"}}>{Object.keys(profileTitles).length} accounts</span></div>
+      <div style={{padding:"0 0 40px"}}>
+        {Object.keys(profileTitles).map(pId=><div key={pId} onClick={()=>setProfileOpen(pId)} style={{background:IS.postBg,borderBottom:`1px solid ${IS.border}`,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:IS.darkBg,border:`1px solid ${IS.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{profileEmojis[pId]}</div>
+          <div style={{flex:1}}>
+            <p style={{fontSize:12,fontWeight:600,color:profileColors[pId],margin:0}}>{profileTitles[pId].slice(1)}</p>
+            <p style={{fontSize:9,color:IS.muted,margin:"1px 0 0"}}>{profileTaglines[pId]}</p>
+          </div>
+          <span style={{fontSize:11,color:"rgba(212,184,136,0.3)"}}>→</span>
+        </div>)}
+      </div>
+    </div>);
+  };
+
+  if(profileOpen&&!desktopPanel)return renderProfileView();
+
+  return(<>
+  <div style={{background:IS.bg,minHeight:"100vh",color:IS.text}} onClick={()=>dotsOpen&&setDotsOpen(null)}>
     {/* Logo bar */}
     <div style={{background:IS.darkBg,padding:"12px 16px",borderBottom:`2px solid ${IS.amberLight}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div><span style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:"#E8D9B8"}}>insights</span><span style={{fontSize:9,color:"rgba(212,184,136,0.5)",letterSpacing:2,textTransform:"uppercase",marginLeft:7}}>by cLOUD</span></div>
@@ -1300,7 +1306,22 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
     <div style={{background:IS.darkBg,padding:"6px 14px",borderBottom:`1px solid #2E2010`}}><span style={{fontSize:9,fontWeight:500,color:IS.amberLight,letterSpacing:0.5,textTransform:"uppercase"}}>your feed</span></div>
     {feedPosts.map(p=><PostCard key={p.id} post={p}/>)}
     {feedPosts.every(p=>dismissed.includes(p.id))&&<div style={{padding:"28px 20px",textAlign:"center"}}><p style={{fontSize:13,color:IS.muted}}>feed is clear — check back after logging more sessions</p></div>}
-  </div>);
+  </div>
+  {desktopPanel&&profileOpen&&(<>
+    <div onClick={()=>setProfileOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200}}/>
+    <div style={{position:"fixed",top:0,right:0,bottom:0,width:420,maxWidth:"90vw",zIndex:201,background:IS.bg,boxShadow:"-8px 0 24px rgba(0,0,0,0.4)",overflowY:"auto",borderLeft:"2.5px solid rgba(232,200,154,0.5)"}}>
+      <div style={{background:"linear-gradient(90deg,#2C1D07,#4A2E0A)",padding:"7px 12px",display:"flex",alignItems:"center",gap:8,borderBottom:"2px solid rgba(232,200,154,0.3)",position:"sticky",top:0,zIndex:1}}>
+        <div style={{display:"flex",gap:4}}>
+          <div onClick={()=>setProfileOpen(false)} style={{width:14,height:14,borderRadius:"50%",border:"1px solid rgba(200,100,100,0.4)",color:"rgba(200,100,100,0.6)",fontSize:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>✕</div>
+          <div style={{width:14,height:14,borderRadius:"50%",border:"1px solid rgba(232,200,154,0.3)",color:"rgba(232,200,154,0.5)",fontSize:8,display:"flex",alignItems:"center",justifyContent:"center"}}>−</div>
+          <div style={{width:14,height:14,borderRadius:"50%",border:"1px solid rgba(232,200,154,0.3)",color:"rgba(232,200,154,0.5)",fontSize:8,display:"flex",alignItems:"center",justifyContent:"center"}}>□</div>
+        </div>
+        <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(232,200,154,0.7)",letterSpacing:1}}>PROFILE</span>
+      </div>
+      {renderProfileView()}
+    </div>
+  </>)}
+  </>);
 }
 
 
@@ -2287,13 +2308,13 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
           <div style={{padding:"6px 10px",borderRadius:"0 4px 4px 0",marginBottom:10,marginTop:20,display:"flex",alignItems:"center",background:"linear-gradient(90deg,rgba(232,200,154,0.12),rgba(10,8,5,0.6))",borderLeft:"2px solid rgba(232,200,154,0.3)"}}>
             <span style={{fontFamily:"'DM Mono',monospace",fontSize:11,letterSpacing:1,color:"rgba(232,200,154,0.55)"}}>FINISHED RE-UPS</span>
           </div>
-          {finishedReups.slice(0,2).map(rup=>(
+          {[...finishedReups].sort((a,b)=>(b.number||0)-(a.number||0)).slice(0,5).map(rup=>(
             <div key={rup.id} style={{padding:"12px 14px",borderRadius:6,marginBottom:8,background:"rgba(10,8,5,0.65)",border:"1.5px solid rgba(232,200,154,0.08)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:14,color:"rgba(232,200,154,0.7)"}}>re-up #{rup.number||"?"}</span>
-                <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(232,200,154,0.3)"}}>{rup.closedDate||rup.date||""}</span>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <span style={{fontSize:13,fontWeight:500,color:"rgba(232,200,154,0.85)"}}>📦 re-up #{rup.number||"?"} · {rup.date}</span>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(232,200,154,0.3)"}}>closed {rup.closedDate}</span>
               </div>
-              <div style={{fontSize:11,color:"rgba(232,200,154,0.4)",marginTop:3}}>{(rup.strainNames||[]).join(", ")}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{(rup.strainNames||[]).map((n,i)=><span key={i} style={{fontSize:11,background:"rgba(232,200,154,0.08)",color:"rgba(232,200,154,0.6)",padding:"3px 8px",borderRadius:8}}>{n}</span>)}</div>
             </div>
           ))}
 
@@ -2672,12 +2693,15 @@ function DesktopLibraryPage({strains,legacyStrains,onSelectStrain}){
   const[ratingFilter,setRatingFilter]=useState(0);
   const[libTab,setLibTab]=useState("strains");
   const[starredOnly,setStarredOnly]=useState(false);
-  const[collapsedMonths,setCollapsedMonths]=useState({});
+  const[monthIndex,setMonthIndex]=useState(0);
   const[expandedLegacy,setExpandedLegacy]=useState({});
-  const toggleMonth=m=>setCollapsedMonths(prev=>({...prev,[m]:!prev[m]}));
   const toggleLegacy=id=>setExpandedLegacy(prev=>({...prev,[id]:!prev[id]}));
   const isNeverAgain=s=>s.cops.some(c=>c.session?.copAgain==="Never again");
   const getLatestCop=s=>s.cops[s.cops.length-1];
+  const copAgainOptions=["","Yes","Maybe","No","Never again"];
+  const cycleCopAgain=()=>setCopAgainFilter(prev=>copAgainOptions[(copAgainOptions.indexOf(prev)+1)%copAgainOptions.length]);
+  const cycleRating=()=>setRatingFilter(prev=>prev>=5?0:prev+1);
+
   const activeStrains=strains.filter(s=>{
     if(s.legacy)return false;
     if(starredOnly&&!s.starred)return false;
@@ -2695,143 +2719,169 @@ function DesktopLibraryPage({strains,legacyStrains,onSelectStrain}){
     monthGroups[month].push(s);
   });
   const monthOrder=Object.keys(monthGroups);
+  const safeMonthIndex=Math.min(monthIndex,Math.max(0,monthOrder.length-1));
+  const currentMonth=monthOrder[safeMonthIndex];
+  const currentMonthStrains=currentMonth?monthGroups[currentMonth]:[];
+
   const allMixes=strains.flatMap(s=>s.cops.flatMap(c=>(c.mixes||[]).filter(m=>m.status==="reviewed").map(m=>({...m,strainName:s.name,strainId:s.id,copType:c.type}))));
   const uniqueMixes=[];const seenShared=new Set();
   allMixes.forEach(m=>{if(m.sharedId&&seenShared.has(m.sharedId))return;if(m.sharedId)seenShared.add(m.sharedId);uniqueMixes.push(m);});
-  const D={bg:"#1A1410",card:"rgba(232,224,212,0.05)",border:"rgba(232,224,212,0.1)",text:"#E8E0D4",muted:"rgba(232,224,212,0.4)",amber:"#D4B888"};
   const legacyHasContent=l=>!!(l.notes||l.source||l.brand||l.container);
 
-  return(
-    <div style={{flex:1,overflowY:"auto",padding:"32px 36px",color:D.text}}>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:"rgba(255,255,255,0.9)",marginBottom:4}}>library</div>
-      <p style={{fontSize:12,color:D.muted,marginBottom:20}}>{strains.filter(s=>!s.legacy).length} strains · {uniqueMixes.length} mix{uniqueMixes.length!==1?"es":""} · {legacyStrains.length} legacy</p>
+  const A="#E8C89A";
+  const tabCounts={strains:strains.filter(s=>!s.legacy).length,mixes:uniqueMixes.length,legacy:legacyStrains.length};
 
-      <div style={{display:"flex",gap:6,marginBottom:20}}>
-        {["strains","mixes","legacy"].map(t=>(
-          <span key={t} onClick={()=>setLibTab(t)} style={{padding:"8px 18px",borderRadius:20,fontSize:12,cursor:"pointer",fontWeight:libTab===t?500:400,background:libTab===t?(t==="mixes"?"#8B6D8B":t==="legacy"?D.amber:"#E8E0D4"):"transparent",color:libTab===t?"#1A1410":D.muted,border:libTab===t?"none":`0.5px solid ${D.border}`}}>{t}</span>
-        ))}
+  return(
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#1A1510"}}>
+      {/* Browser-chrome tab bar */}
+      <div style={{flexShrink:0,background:"linear-gradient(180deg,#2A2018,#1E1810)"}}>
+        <div style={{display:"flex",alignItems:"flex-end",padding:"0 12px"}}>
+          {["strains","mixes","legacy"].map(t=>(
+            <div key={t} onClick={()=>setLibTab(t)} style={libTab===t?{padding:"7px 20px",background:"#1A1510",border:`1.5px solid rgba(232,200,154,0.2)`,borderBottom:"none",borderRadius:"6px 6px 0 0",position:"relative",marginBottom:-1,zIndex:2,cursor:"pointer"}:{padding:"6px 18px",background:"#15110C",border:"1px solid rgba(232,200,154,0.08)",borderBottom:"none",borderRadius:"6px 6px 0 0",marginBottom:-1,cursor:"pointer"}}>
+              {libTab===t&&<div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${A}66,${A}1a)`,borderRadius:"6px 6px 0 0"}}/>}
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,letterSpacing:1,color:libTab===t?A:"rgba(232,200,154,0.3)"}}>{t.toUpperCase()}</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:libTab===t?"rgba(232,200,154,0.3)":"rgba(232,200,154,0.15)",marginLeft:6}}>{tabCounts[t]}</span>
+            </div>
+          ))}
+          <div style={{marginLeft:"auto",padding:"6px 12px",marginBottom:-1}}>
+            <a href="https://leonnariley18-ui.github.io/the-cloud/" target="_blank" rel="noopener noreferrer" style={{fontSize:9,color:"rgba(232,200,154,0.2)",textDecoration:"underline",cursor:"pointer"}}>v1 archive ↗</a>
+          </div>
+        </div>
+
+        {libTab==="strains"&&(
+          <div style={{padding:"8px 12px",borderTop:"1.5px solid rgba(232,200,154,0.15)",borderBottom:"2px solid rgba(232,200,154,0.1)",display:"flex",alignItems:"center",gap:8,background:"linear-gradient(180deg,#1E1810,#1A1510)"}}>
+            <div style={{display:"flex",gap:3}}>
+              <div onClick={()=>setMonthIndex(Math.max(0,safeMonthIndex-1))} style={{width:22,height:22,border:"1.5px solid rgba(232,200,154,0.15)",background:"rgba(232,200,154,0.04)",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,fontSize:10,color:safeMonthIndex>0?"rgba(232,200,154,0.6)":"rgba(232,200,154,0.2)",cursor:safeMonthIndex>0?"pointer":"default"}}>◂</div>
+              <div onClick={()=>setMonthIndex(Math.min(monthOrder.length-1,safeMonthIndex+1))} style={{width:22,height:22,border:"1.5px solid rgba(232,200,154,0.15)",background:"rgba(232,200,154,0.04)",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:3,fontSize:10,color:safeMonthIndex<monthOrder.length-1?"rgba(232,200,154,0.6)":"rgba(232,200,154,0.2)",cursor:safeMonthIndex<monthOrder.length-1?"pointer":"default"}}>▸</div>
+            </div>
+            <div style={{flex:1,background:"rgba(232,200,154,0.04)",border:"1.5px solid rgba(232,200,154,0.12)",borderRadius:4,padding:"6px 12px",display:"flex",alignItems:"center",gap:8,position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,rgba(232,200,154,0.15),transparent)"}}/>
+              <span style={{fontSize:11,color:"rgba(232,200,154,0.3)"}}>🔍</span>
+              <input value={libSearch} onChange={e=>{setLibSearch(e.target.value);setMonthIndex(0);}} placeholder="search by name, parent, terpene, or vibe..." style={{flex:1,background:"transparent",border:"none",outline:"none",fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(232,200,154,0.7)"}}/>
+            </div>
+            <div style={{display:"flex",gap:3}}>
+              <div onClick={()=>setStarredOnly(!starredOnly)} style={{padding:"4px 10px",border:`1.5px solid ${starredOnly?A+"66":"rgba(232,200,154,0.1)"}`,borderRadius:3,cursor:"pointer",background:starredOnly?"rgba(232,200,154,0.1)":"transparent"}}>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:starredOnly?A:"rgba(232,200,154,0.3)"}}>⭐</span>
+              </div>
+              <div onClick={cycleCopAgain} style={{padding:"4px 10px",border:`1.5px solid ${copAgainFilter?A+"66":"rgba(232,200,154,0.1)"}`,borderRadius:3,cursor:"pointer",background:copAgainFilter?"rgba(232,200,154,0.1)":"transparent"}}>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:copAgainFilter?A:"rgba(232,200,154,0.3)"}}>{copAgainFilter?`COP AGAIN: ${copAgainFilter.toUpperCase()}`:"COP AGAIN"}</span>
+              </div>
+              <div onClick={cycleRating} style={{padding:"4px 10px",border:`1.5px solid ${ratingFilter?A+"66":"rgba(232,200,154,0.1)"}`,borderRadius:3,cursor:"pointer",background:ratingFilter?"rgba(232,200,154,0.1)":"transparent"}}>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:ratingFilter?A:"rgba(232,200,154,0.3)"}}>{ratingFilter?`${ratingFilter}★+`:"★+"}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {libTab==="strains"&&(<>
-        <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="search strains, terpenes, parents..." style={{width:"100%",maxWidth:480,boxSizing:"border-box",background:D.card,borderRadius:8,padding:"10px 14px",fontSize:13,color:D.text,border:`0.5px solid ${D.border}`,fontFamily:"inherit",outline:"none",marginBottom:10}}/>
-        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:20}}>
-          <span onClick={()=>setStarredOnly(!starredOnly)} style={{padding:"5px 12px",borderRadius:20,fontSize:10,cursor:"pointer",background:starredOnly?D.amber:"transparent",color:starredOnly?"#1A1410":D.muted,border:starredOnly?"none":`0.5px solid ${D.border}`}}>⭐ starred</span>
-          {["Yes","Maybe","No","Never again"].map(ca=>(
-            <span key={ca} onClick={()=>setCopAgainFilter(copAgainFilter===ca?"":ca)} style={{padding:"5px 10px",borderRadius:20,fontSize:10,cursor:"pointer",background:copAgainFilter===ca?copAgainColor(ca):"transparent",color:copAgainFilter===ca?"#E8E0D4":D.muted,border:copAgainFilter===ca?"none":`0.5px solid ${D.border}`}}>{ca.toLowerCase()}</span>
-          ))}
-          {[3,4,5].map(r=>(
-            <span key={r} onClick={()=>setRatingFilter(ratingFilter===r?0:r)} style={{padding:"5px 10px",borderRadius:20,fontSize:10,cursor:"pointer",background:ratingFilter===r?D.amber:"transparent",color:ratingFilter===r?"#1A1410":D.muted,border:ratingFilter===r?"none":`0.5px solid ${D.border}`}}>{r}+ ⭐</span>
-          ))}
-        </div>
-
-        {monthOrder.length===0&&<p style={{fontSize:13,color:D.muted}}>no strains logged yet</p>}
-        {monthOrder.map(month=>(
-          <div key={month} style={{marginBottom:28}}>
-            <div onClick={()=>toggleMonth(month)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",marginBottom:collapsedMonths[month]?0:14,borderBottom:`0.5px solid ${D.border}`,paddingBottom:8}}>
-              <p style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:D.amber,margin:0}}>{month}</p>
-              <span style={{fontSize:11,color:D.muted}}>{collapsedMonths[month]?`${monthGroups[month].length} strain${monthGroups[month].length!==1?"s":""}  ▸`:"▾"}</span>
-            </div>
-            {!collapsedMonths[month]&&(
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))",gap:10}}>
-                {monthGroups[month].map(s=>{
-                  const lc=getLatestCop(s);const ls=lc?.session;const locked=isNeverAgain(s);
-                  return(
-                    <div key={s.id} onClick={()=>onSelectStrain(s)} style={{display:"flex",gap:12,cursor:"pointer",padding:"12px 14px",borderRadius:8,background:D.card,border:`0.5px solid ${D.border}`}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",marginTop:4,flexShrink:0,background:typeColor(lc?.type),boxShadow:lc?.status==="on-hand"?`0 0 8px ${typeColor(lc?.type)}, 0 0 16px ${typeColor(lc?.type)}80`:`0 0 6px ${typeColor(lc?.type)}40`}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <span style={{fontSize:14,fontWeight:500,color:D.text}}>{s.name}</span>
-                            {s.starred&&<span style={{fontSize:12}}>⭐</span>}
-                            {locked&&<span style={{fontSize:10}}>🔒</span>}
-                          </div>
-                          {ls&&<div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=ls.rating} size={12} color={locked?"#C15A4A":"#6B7F5A"}/>)}</div>}
-                        </div>
-                        {lc?.terpenes?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6}}>{lc.terpenes.map(t=><span key={t} style={{fontSize:9,padding:"2px 7px",borderRadius:8,background:`${typeColor(lc.type)}20`,color:typeColor(lc.type)}}>{t.toLowerCase()}</span>)}</div>}
-                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                          {ls&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:`${copAgainColor(ls.copAgain)}30`,color:copAgainColor(ls.copAgain)}}>🔄 {ls.copAgain.toLowerCase()}</span>}
-                          {s.cops.length>1&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:"rgba(212,184,136,0.15)",color:D.amber}}>{s.cops.length} cops</span>}
-                          {s.intent&&<IntentBadge intent={s.intent}/>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+      {/* Content */}
+      <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+        {libTab==="strains"&&(<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,color:A}}>library</div>
+            <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"rgba(232,200,154,0.25)"}}>{activeStrains.length} STRAINS</span>
           </div>
-        ))}
-      </>)}
 
-      {libTab==="mixes"&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(320px, 1fr))",gap:10}}>
-          {uniqueMixes.length===0&&<p style={{fontSize:13,color:D.muted}}>no reviewed mixes yet</p>}
-          {uniqueMixes.map(m=>(
-            <div key={m.id} style={{background:"rgba(139,109,139,0.08)",borderRadius:8,padding:14,border:"0.5px solid rgba(139,109,139,0.15)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7}}>
-                <div style={{width:3,height:14,borderRadius:1,background:typeColor(m.primaryType||m.copType)}}/>
-                <span style={{fontSize:13,fontWeight:500,color:"#C4B0C4"}}>{m.primaryStrain||m.strainName}</span>
-                <span style={{fontSize:11,color:D.muted}}>x</span>
-                <div style={{width:3,height:14,borderRadius:1,background:typeColor(m.withType)}}/>
-                <span style={{fontSize:13,fontWeight:500,color:"#C4B0C4"}}>{m.withStrain}</span>
-                <div style={{display:"flex",gap:1,marginLeft:"auto"}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=m.rating} size={11} color="#8B6D8B"/>)}</div>
-              </div>
-              {m.combinedTerpenes&&<div style={{display:"flex",flexWrap:"wrap",gap:2,marginBottom:7}}>{m.combinedTerpenes.map(t=><span key={t} style={{fontSize:9,background:"rgba(139,109,139,0.2)",color:"#C4B0C4",padding:"2px 6px",borderRadius:6}}>{t.toLowerCase()}</span>)}</div>}
-              {m.bedtime&&<span style={{display:"inline-block",fontSize:9,padding:"2px 7px",borderRadius:6,background:"rgba(44,44,74,0.5)",color:"#C9B8F0",marginBottom:7}}>🌙 bedtime</span>}
-              {m.vibeTags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:7}}>{m.vibeTags.map(v=><span key={v} style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:"rgba(139,109,139,0.12)",color:"rgba(196,176,196,0.65)"}}>{v.toLowerCase()}</span>)}</div>}
-              {m.notes&&<p style={{fontSize:11,color:D.muted,margin:"0 0 4px",lineHeight:1.55}}>{m.notes}</p>}
-              <p style={{fontSize:10,color:"rgba(232,224,212,0.25)",margin:0}}>{m.date}</p>
+          {monthOrder.length===0&&<p style={{fontSize:13,color:"rgba(232,200,154,0.3)"}}>no strains logged yet</p>}
+
+          {currentMonth&&(<>
+            <div style={{background:`linear-gradient(90deg,${A}1f,rgba(26,21,16,0.8))`,padding:"5px 10px",borderLeft:`2px solid ${A}59`,marginBottom:12,borderRadius:"0 4px 4px 0"}}>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:`${A}8c`,letterSpacing:1}}>{currentMonth.toUpperCase()} · {currentMonthStrains.length} STRAIN{currentMonthStrains.length!==1?"S":""}</span>
             </div>
-          ))}
-        </div>
-      )}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {currentMonthStrains.map(s=>{
+                const lc=getLatestCop(s);const ls=lc?.session;const locked=isNeverAgain(s);
+                return(
+                  <div key={s.id} onClick={()=>onSelectStrain(s)} style={{padding:"10px 12px",background:"rgba(232,200,154,0.04)",border:"1.5px solid rgba(232,200,154,0.1)",borderRadius:4,cursor:"pointer",position:"relative",overflow:"hidden"}}>
+                    <div style={{position:"absolute",top:0,left:0,right:0,height:1.5,background:`linear-gradient(90deg,${A}33,transparent)`}}/>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <span style={{fontSize:12,fontWeight:500,color:"rgba(232,200,154,0.85)"}}>{s.name}</span>
+                      <div style={{display:"flex",gap:1.5}}>{[1,2,3,4,5].map(n=><div key={n} style={{width:6,height:6,borderRadius:"50%",background:ls&&n<=ls.rating?"#C4A882":"rgba(196,168,130,0.25)"}}/>)}</div>
+                    </div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.3)"}}>
+                      {(lc?.type||"unknown").toUpperCase()}{s.starred?" · ⭐":""}{locked?" · 🔒":""}{ls?.copAgain?` · COP AGAIN ${ls.copAgain.toUpperCase()}`:""}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:16,padding:"6px 10px",borderTop:"1px solid rgba(232,200,154,0.06)",display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.15)"}}>SHOWING {currentMonthStrains.length} OF {activeStrains.length} STRAINS</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.15)"}}>{currentMonth.toUpperCase()}</span>
+            </div>
+          </>)}
+        </>)}
 
-      {libTab==="legacy"&&(
-        <div>
-          {["Yes","Maybe","Never again"].map(status=>{
-            const group=legacyStrains.filter(l=>l.copAgain===status).sort((a,b)=>legacyHasContent(b)?1:legacyHasContent(a)?-1:0);
-            if(group.length===0)return null;
-            const isNever=status==="Never again";
-            return(
-              <div key={status} style={{marginBottom:20}}>
-                <p style={{fontSize:10,fontWeight:500,color:D.amber,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 10px"}}>{status==="Yes"?"would cop again":status==="Maybe"?"maybe cop again":"never again"}</p>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))",gap:6}}>
-                  {group.map(l=>{
-                    const hasContent=legacyHasContent(l);
-                    const isOpen=expandedLegacy[l.id];
-                    return(
-                      <div key={l.id} onClick={hasContent&&!isNever?()=>toggleLegacy(l.id):undefined}
-                        style={{background:"rgba(212,184,136,0.06)",borderRadius:8,border:`0.5px solid ${isOpen?"rgba(212,184,136,0.18)":"rgba(212,184,136,0.1)"}`,overflow:"hidden",cursor:hasContent&&!isNever?"pointer":"default",opacity:isNever?0.4:1}}>
-                        <div style={{padding:"11px 14px",display:"flex",alignItems:"center",gap:8}}>
-                          {l.type&&<div style={{width:3,height:16,borderRadius:2,background:typeColor(l.type),flexShrink:0}}/>}
-                          <span style={{fontSize:13,fontWeight:500,color:D.text,flex:1}}>{l.name}</span>
-                          {l.type&&<span style={{fontSize:10,color:D.muted}}>{l.type.toLowerCase()}</span>}
-                          {hasContent&&!isNever&&<span style={{fontSize:10,color:"rgba(232,224,212,0.2)"}}>{isOpen?"▴":"▾"}</span>}
-                        </div>
-                        {isOpen&&hasContent&&(
-                          <div style={{borderTop:"0.5px solid rgba(212,184,136,0.08)",padding:"10px 14px 13px",display:"flex",flexDirection:"column",gap:7}}>
-                            {(l.brand||l.source||l.container)&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                              {l.brand&&<span style={{fontSize:12,fontWeight:500,color:"rgba(212,184,136,0.85)"}}>🏷️ {l.brand}</span>}
-                              {(l.source||l.container)&&<span style={{fontSize:10,color:"rgba(212,184,136,0.5)"}}>{[l.source?.toLowerCase(),l.container?.toLowerCase()].filter(Boolean).join(" · ")}</span>}
-                            </div>}
-                            {l.notes&&<p style={{fontSize:12,color:"rgba(232,224,212,0.8)",margin:0,lineHeight:1.55}}>{l.notes}</p>}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+        {libTab==="mixes"&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(320px, 1fr))",gap:10}}>
+            {uniqueMixes.length===0&&<p style={{fontSize:13,color:"rgba(232,200,154,0.3)"}}>no reviewed mixes yet</p>}
+            {uniqueMixes.map(m=>(
+              <div key={m.id} style={{background:"rgba(139,109,139,0.08)",borderRadius:4,padding:14,border:"0.5px solid rgba(139,109,139,0.15)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7}}>
+                  <div style={{width:3,height:14,borderRadius:1,background:typeColor(m.primaryType||m.copType)}}/>
+                  <span style={{fontSize:13,fontWeight:500,color:"#C4B0C4"}}>{m.primaryStrain||m.strainName}</span>
+                  <span style={{fontSize:11,color:"rgba(232,200,154,0.3)"}}>x</span>
+                  <div style={{width:3,height:14,borderRadius:1,background:typeColor(m.withType)}}/>
+                  <span style={{fontSize:13,fontWeight:500,color:"#C4B0C4"}}>{m.withStrain}</span>
+                  <div style={{display:"flex",gap:1,marginLeft:"auto"}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=m.rating} size={11} color="#8B6D8B"/>)}</div>
                 </div>
+                {m.combinedTerpenes&&<div style={{display:"flex",flexWrap:"wrap",gap:2,marginBottom:7}}>{m.combinedTerpenes.map(t=><span key={t} style={{fontSize:9,background:"rgba(139,109,139,0.2)",color:"#C4B0C4",padding:"2px 6px",borderRadius:6}}>{t.toLowerCase()}</span>)}</div>}
+                {m.bedtime&&<span style={{display:"inline-block",fontSize:9,padding:"2px 7px",borderRadius:6,background:"rgba(44,44,74,0.5)",color:"#C9B8F0",marginBottom:7}}>🌙 bedtime</span>}
+                {m.vibeTags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:7}}>{m.vibeTags.map(v=><span key={v} style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:"rgba(139,109,139,0.12)",color:"rgba(196,176,196,0.65)"}}>{v.toLowerCase()}</span>)}</div>}
+                {m.notes&&<p style={{fontSize:11,color:"rgba(232,200,154,0.4)",margin:"0 0 4px",lineHeight:1.55}}>{m.notes}</p>}
+                <p style={{fontSize:10,color:"rgba(232,200,154,0.2)",margin:0}}>{m.date}</p>
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+
+        {libTab==="legacy"&&(
+          <div>
+            {["Yes","Maybe","Never again"].map(status=>{
+              const group=legacyStrains.filter(l=>l.copAgain===status).sort((a,b)=>legacyHasContent(b)?1:legacyHasContent(a)?-1:0);
+              if(group.length===0)return null;
+              const isNever=status==="Never again";
+              return(
+                <div key={status} style={{marginBottom:20}}>
+                  <p style={{fontSize:10,fontWeight:500,color:A,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 10px"}}>{status==="Yes"?"would cop again":status==="Maybe"?"maybe cop again":"never again"}</p>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))",gap:6}}>
+                    {group.map(l=>{
+                      const hasContent=legacyHasContent(l);
+                      const isOpen=expandedLegacy[l.id];
+                      return(
+                        <div key={l.id} onClick={hasContent&&!isNever?()=>toggleLegacy(l.id):undefined}
+                          style={{background:"rgba(232,200,154,0.04)",borderRadius:4,border:`0.5px solid ${isOpen?"rgba(232,200,154,0.18)":"rgba(232,200,154,0.1)"}`,overflow:"hidden",cursor:hasContent&&!isNever?"pointer":"default",opacity:isNever?0.4:1}}>
+                          <div style={{padding:"11px 14px",display:"flex",alignItems:"center",gap:8}}>
+                            {l.type&&<div style={{width:3,height:16,borderRadius:2,background:typeColor(l.type),flexShrink:0}}/>}
+                            <span style={{fontSize:13,fontWeight:500,color:"rgba(232,200,154,0.85)",flex:1}}>{l.name}</span>
+                            {l.type&&<span style={{fontSize:10,color:"rgba(232,200,154,0.3)"}}>{l.type.toLowerCase()}</span>}
+                            {hasContent&&!isNever&&<span style={{fontSize:10,color:"rgba(232,200,154,0.2)"}}>{isOpen?"▴":"▾"}</span>}
+                          </div>
+                          {isOpen&&hasContent&&(
+                            <div style={{borderTop:"0.5px solid rgba(232,200,154,0.08)",padding:"10px 14px 13px",display:"flex",flexDirection:"column",gap:7}}>
+                              {(l.brand||l.source||l.container)&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                {l.brand&&<span style={{fontSize:12,fontWeight:500,color:`${A}d9`}}>🏷️ {l.brand}</span>}
+                                {(l.source||l.container)&&<span style={{fontSize:10,color:`${A}80`}}>{[l.source?.toLowerCase(),l.container?.toLowerCase()].filter(Boolean).join(" · ")}</span>}
+                              </div>}
+                              {l.notes&&<p style={{fontSize:12,color:"rgba(232,200,154,0.7)",margin:0,lineHeight:1.55}}>{l.notes}</p>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function DesktopShell(){
-  const{synced,strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,savedTips}=useCloudData();
+  const{synced,strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,savedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved}=useCloudData();
   const[page,setPage]=useState("home");
   const[stashOpen,setStashOpen]=useState(false);
   const[selectedStrain,setSelectedStrain]=useState(null);
@@ -2921,6 +2971,12 @@ function DesktopShell(){
             ?<DesktopHomePage strains={strains} legacyStrains={legacyStrains} onHand={onHand} coppedEntries={coppedEntries} setCoppedEntries={setCoppedEntries} reups={reups} setReups={setReups} finishedReups={finishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
             :page==="library"
             ?<DesktopLibraryPage strains={strains} legacyStrains={legacyStrains} onSelectStrain={handleSelectStrain}/>
+            :page==="insights"
+            ?(<div style={{flex:1,background:"#FAF6F0",overflowY:"auto",display:"flex",justifyContent:"center"}}>
+                <div style={{width:480,borderLeft:"2px solid #E0D8C8",borderRight:"2px solid #E0D8C8"}}>
+                  <InsightsPage strains={strains} onHand={onHand} onPeek={handleSelectStrain} dismissed={insightsDismissed} setDismissed={setInsightsDismissed} saved={insightsSaved} setSaved={setInsightsSaved} desktopPanel={true}/>
+                </div>
+              </div>)
             :<DesktopPlaceholder page={page} strainCount={strainCount} onHandCount={onHandCount} reupCount={reupCount}/>}
         </div>
       )}
