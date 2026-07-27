@@ -15,6 +15,8 @@ const TERPENES=["Myrcene","Limonene","Caryophyllene","Linalool","Pinene","Humule
 const VIBE_CATEGORIES={"🏃":["Bed mode","Couch-locked","Clean mode","Get things done","Restless"],"🧠":["Deep thinking","Creative flow","Music dive","Zoned out","Laser focused"],"💬":["Conversational","Giggly","Hang out","Quiet mode"],"✨":["Munchies","Music hits different","Body high","Pain relief","Full-body euphoria","Horny","Connected to nature","Dream-inducing","Funny inner-dialogue"],"📊":["Uplifted","Cozy","Sleepy","Energized","Anxious","Paranoid","IDGAF mode"],"👅":["Earthy","Citrus","Pine","Sweet","Gassy","Skunky","Floral","Peppery","Berry","Diesel","Tropical","Minty","Woody","Spicy"]};
 const VIBE_TAGS=Object.values(VIBE_CATEGORIES).flat();
 const today=()=>new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
+const isoToDisplayDate=iso=>{if(!iso)return null;const d=new Date(iso+"T00:00:00");return isNaN(d.getTime())?null:d.toLocaleDateString("en-US",{month:"short",day:"numeric"});};
+const todayIso=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
 const typeColor=t=>({"Sativa":"#C9A84C","Indica":"#7B6B9E","Hybrid":"#6B7F5A"}[t]||"#8C7E6A");
 const copAgainColor=v=>({"Yes":"#6B7F5A","Maybe":"#C17F4A","No":"#8C7E6A","Never again":"#C15A4A"}[v]||"#8C7E6A");
 const intentBadge=i=>({asleep:{bg:"#1A1A2E",color:"#C9B8F0",icon:"🌙"},awake:{bg:"#FFF3E8",color:"#C17F4A",icon:"☀️",border:"0.5px solid #E8D0B0"},adventure:{bg:"#EDF2E8",color:"#6B7F5A",icon:"🏕️"}}[i]||null);
@@ -34,10 +36,23 @@ const HISTORICAL_REUPS=[
 // Shared by both shells so the two lite flows can't drift apart.
 function makeLiteCop(cop,reupId){
   const copId=Date.now();const strainId=cop.existingStrainId||copId+1;
-  const newCop={id:copId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand||"",growType:cop.growType||"",terpenes:[...cop.terpenes],date:today(),firstNotes:cop.notes,status:"on-hand",intent:cop.intent||null,amount:cop.amount||null,reupId:reupId||null,
+  const copDate=isoToDisplayDate(cop.copDate)||today();
+  const newCop={id:copId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand||"",growType:cop.growType||"",terpenes:[...cop.terpenes],date:copDate,firstNotes:cop.notes,status:"on-hand",intent:cop.intent||null,amount:cop.amount||null,reupId:reupId||null,
     session:null,lite:true,experiences:[],mixes:[],notes:[]};
-  const onHandEntry={strainName:cop.name.trim(),strainId,copId,type:cop.type,terpenes:[...cop.terpenes],date:today(),rating:null,lite:true};
-  return{copId,strainId,newCop,onHandEntry};
+  const onHandEntry={strainName:cop.name.trim(),strainId,copId,type:cop.type,terpenes:[...cop.terpenes],date:copDate,rating:null,lite:true};
+  return{copId,strainId,newCop,onHandEntry,copDate,copIso:cop.copDate||todayIso()};
+}
+
+// A lite re-up is a backfill, so it takes the date of its earliest cop rather
+// than the day it happened to be created. dateIso is kept only for comparison --
+// the visible `date` stays the app's "MMM D" display string.
+function addLiteCopToReup(reups,reupId,copId,copDate,copIso){
+  return reups.map(r=>{
+    if(r.id!==reupId)return r;
+    const next={...r,copIds:[...(r.copIds||[]),copId]};
+    if(r.lite&&(!r.dateIso||copIso<r.dateIso)){next.date=copDate;next.dateIso=copIso;}
+    return next;
+  });
 }
 
 function assignReupNumbers(finished,active){
@@ -402,6 +417,10 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{liteAdded.map((n,i)=><span key={i} style={{fontSize:10,background:"rgba(91,138,114,0.25)",color:"#9CC4A8",padding:"2px 8px",borderRadius:8}}>{n}</span>)}</div>
     </GlassCard>}
     <GlassCard>
+      {isLite&&<><label style={{fontSize:12,fontWeight:500,color:"rgba(240,235,225,0.5)",display:"block",marginBottom:6}}>when'd you cop this? 📅</label>
+      <input type="date" value={cop.copDate||todayIso()} max={todayIso()} onChange={e=>setCop({...cop,copDate:e.target.value})} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:"inherit",background:"rgba(240,235,225,0.06)",color:"#F0EBE1",border:"0.5px solid rgba(240,235,225,0.12)",outline:"none",marginBottom:6}}/>
+      <p style={{fontSize:10,color:"rgba(240,235,225,0.35)",margin:"0 0 20px",lineHeight:1.4}}>backdate it to when you actually picked it up</p></>}
+
       {/* V2: intent at top */}
       <label style={{fontSize:12,fontWeight:500,color:"rgba(240,235,225,0.5)",display:"block",marginBottom:6}}>what's it for?</label>
       <div style={{display:"flex",gap:6,marginBottom:20}}>{["awake","asleep","adventure"].map(i=><button key={i} onClick={()=>setCop({...cop,intent:cop.intent===i?"":i})} style={{flex:1,padding:"10px 8px",borderRadius:8,fontSize:12,fontFamily:"inherit",cursor:"pointer",fontWeight:cop.intent===i?500:400,background:cop.intent===i?(intentBadge(i)?.bg||P.bg):"rgba(240,235,225,0.06)",color:cop.intent===i?(intentBadge(i)?.color||P.cream):"rgba(240,235,225,0.5)",border:cop.intent===i?"none":"0.5px solid rgba(240,235,225,0.1)"}}>{i==="asleep"?"🌙 asleep":i==="awake"?"☀️ awake":"🏕️ adventure"}</button>)}</div>
@@ -2139,16 +2158,16 @@ const FIELD_BOX={background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255
 /* ═══════════════════════════════════════════
    DESKTOP — Home page
    ═══════════════════════════════════════════ */
-function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,reups,setReups,finishedReups,savedComparisons,savedTips,onNavigate}){
+function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,reups,setReups,finishedReups,setFinishedReups,savedComparisons,savedTips,onNavigate}){
   const hasSaved=savedComparisons.length>0||savedTips.length>0;
   const openReups=reups||[];
 
   const[formOpen,setFormOpen]=useState(!hasSaved);
   const[activeReupId,setActiveReupId]=useState(openReups[0]?.id||null);
-  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:""});
+  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
   const[showSugg,setShowSugg]=useState(false);
 
-  const resetCop=()=>setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:""});
+  const resetCop=()=>setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
 
   const handleAddReup=(lite=false)=>{
     if(openReups.length>=2)return;
@@ -2161,6 +2180,23 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
 
   const activeReup=openReups.find(r=>r.id===activeReupId);
   const isLite=!!activeReup?.lite;
+  const[confirmDeleteReup,setConfirmDeleteReup]=useState(null);
+
+  // same rules as mobile: only empty re-ups, two-tap confirm, renumber after
+  const handleDeleteReup=reupId=>{
+    const target=openReups.find(r=>r.id===reupId);
+    if(!target)return;
+    if((target.copIds||[]).length!==0||(target.coppedIds||[]).length!==0)return;
+    if(confirmDeleteReup!==reupId){setConfirmDeleteReup(reupId);return;}
+    const remainingActive=openReups.filter(r=>r.id!==reupId);
+    const sortedFinished=[...finishedReups].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
+    const sortedActive=[...remainingActive].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
+    const{finished:renumberedFinished,active:renumberedActive}=assignReupNumbers(sortedFinished,sortedActive);
+    setFinishedReups(renumberedFinished);
+    setReups(renumberedActive);
+    setConfirmDeleteReup(null);
+    if(activeReupId===reupId)setActiveReupId(null);
+  };
 
   const handleSaveCop=()=>{
     if(!cop.name.trim())return;
@@ -2174,10 +2210,10 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
   // Lite cop — straight to on-hand, no first session. Mirrors mobile's handleSaveLiteCop.
   const handleSaveLiteCop=()=>{
     if(!cop.name.trim())return;
-    const{copId,strainId,newCop,onHandEntry}=makeLiteCop(cop,activeReupId);
+    const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:s.intent||cop.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
-    if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,copIds:[...(r.copIds||[]),copId]}));
+    if(activeReupId)setReups(addLiteCopToReup(openReups,activeReupId,copId,copDate,copIso));
     setOnHand([onHandEntry,...onHand]);
     resetCop();
   };
@@ -2228,6 +2264,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
                 <div key={r.id} onClick={()=>setActiveReupId(r.id)} style={{cursor:"pointer"}}>
                   <RetroWindow title={"RE-UP #"+r.number+(r.lite?" · LITE":"")} badge={activeReupId===r.id?"SELECTED":null}>
                     <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.3)"}}>{(r.coppedIds?.length||0)+(r.copIds?.length||0)} STRAIN(S)</div>
+                    {(r.coppedIds?.length||0)+(r.copIds?.length||0)===0&&<div onClick={e=>{e.stopPropagation();handleDeleteReup(r.id);}} style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(200,80,40,0.75)",cursor:"pointer",marginTop:6}}>{confirmDeleteReup===r.id?"CONFIRM DELETE?":"DELETE EMPTY RE-UP"}</div>}
                   </RetroWindow>
                 </div>
               ))}
@@ -2242,6 +2279,8 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
             <RetroWindow title={isLite?"LOG A LITE COP":"LOG A NEW COP"} badge={isLite?"→ NO FIRST SESH 🌿":activeReupId?"→ SELECTED RE-UP":null} onClose={()=>setFormOpen(false)}>
               <div style={{display:"flex",gap:20}}>
                 <div style={{flex:1}}>
+                  {isLite&&<><RetroHeader>cop date</RetroHeader>
+                  <input type="date" value={cop.copDate||todayIso()} max={todayIso()} onChange={e=>setCop({...cop,copDate:e.target.value})} style={{width:"100%",boxSizing:"border-box",background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,padding:"10px 12px",fontSize:12,color:"rgba(255,255,255,0.75)",fontFamily:"inherit",outline:"none",marginBottom:16,colorScheme:"dark"}}/></>}
                   <RetroHeader>intent</RetroHeader>
                   <div style={{display:"flex",gap:5,marginBottom:16}}>
                     {[["asleep","🌙 asleep"],["awake","☀️ awake"],["adventure","🏕️ adventure"]].map(([v,label])=>(
@@ -3595,7 +3634,7 @@ function DesktopShell(){
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <DesktopTopBar page={page}/>
           {page==="home"
-            ?<DesktopHomePage strains={strains} setStrains={setStrains} legacyStrains={legacyStrains} onHand={onHand} setOnHand={setOnHand} coppedEntries={coppedEntries} setCoppedEntries={setCoppedEntries} reups={reups} setReups={setReups} finishedReups={finishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
+            ?<DesktopHomePage strains={strains} setStrains={setStrains} legacyStrains={legacyStrains} onHand={onHand} setOnHand={setOnHand} coppedEntries={coppedEntries} setCoppedEntries={setCoppedEntries} reups={reups} setReups={setReups} finishedReups={finishedReups} setFinishedReups={setFinishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
             :page==="library"
             ?<DesktopLibraryPage strains={strains} legacyStrains={legacyStrains} onSelectStrain={handleSelectStrain}/>
             :page==="insights"
@@ -3673,7 +3712,7 @@ function MobileShell(){
 
   // ── UI state ──
   const[view,setView]=useState(null);
-  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:""});
+  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
   const[showSugg,setShowSugg]=useState(false);
   const[editEntry,setEditEntry]=useState(null);
   const[session,setSession]=useState({rating:0,smokesLike:"",smokesLikeLean:"",sw:0,sf:0,pull:0,setting:"indoor",bedtime:false,tasteTags:[],vibeTags:[],notes:"",copAgain:""});
@@ -3698,7 +3737,7 @@ function MobileShell(){
   const getLatestCop=s=>s.cops[s.cops.length-1];
   const isNeverAgain=s=>s.cops.some(c=>c.session?.copAgain==="Never again");
   const reset=what=>{
-    if(what==="cop")setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:""});
+    if(what==="cop")setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
     if(what==="session")setSession({rating:0,smokesLike:"",smokesLikeLean:"",sw:0,sf:0,pull:0,setting:"indoor",bedtime:false,tasteTags:[],vibeTags:[],notes:"",copAgain:""});
     if(what==="mix")setMixSess({rating:0,sw:0,sf:0,pull:0,bedtime:false,vibeTags:[],notes:""});
   };
@@ -3737,10 +3776,10 @@ function MobileShell(){
   // keeps it out of every analytics surface (they all filter c.session).
   const handleSaveLiteCop=()=>{
     if(!cop.name.trim())return;
-    const{copId,strainId,newCop,onHandEntry}=makeLiteCop(cop,activeReupId);
+    const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:s.intent||cop.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
-    if(activeReupId)setReups(reups.map(r=>r.id!==activeReupId?r:{...r,copIds:[...(r.copIds||[]),copId]}));
+    if(activeReupId)setReups(addLiteCopToReup(reups,activeReupId,copId,copDate,copIso));
     setOnHand([onHandEntry,...onHand]);
     reset("cop");
   };
