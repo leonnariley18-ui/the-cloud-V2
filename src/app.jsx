@@ -711,7 +711,7 @@ function LibraryPage({strains,legacyStrains,onOpenDetail,onPeek}){
 /* ═══════════════════════════════════════════
    STRAIN DETAIL PAGE
    ═══════════════════════════════════════════ */
-function StrainDetailPage({strain,copIdx,tab:tabProp,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
+function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
   updateNote,setUpdateNote,onSaveNote,mixMode,setMixMode,
   expNote,setExpNote,onSaveExperience,onHand,strains,
   deleteFromCop,editNoteText,editingItem,setEditingItem,editText,setEditText,confirmDeleteItem,
@@ -785,7 +785,7 @@ function StrainDetailPage({strain,copIdx,tab:tabProp,setTab,onBack,onStar,onUpda
     <p style={{fontSize:11,color:typeTheme.muted,margin:"0 0 14px"}}>{[cop?.date&&`copped ${cop.date}`,s?.date&&`first session ${s.date}`,cop?.finishedDate&&`finished ${cop.finishedDate}`].filter(Boolean).join(" · ")}</p>
 
     {/* Cop switcher */}
-    {strain.cops.length>1&&<div style={{display:"flex",gap:6,marginBottom:16,overflowX:"auto"}}>{strain.cops.map((c,i)=><button key={c.id} onClick={()=>{}} style={{padding:"6px 14px",borderRadius:20,fontSize:11,fontFamily:"inherit",cursor:"pointer",whiteSpace:"nowrap",fontWeight:copIdx===i?500:400,background:copIdx===i?typeTheme.accent:"transparent",color:copIdx===i?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:copIdx===i?"none":`0.5px solid ${typeTheme.cardBorder}`}}>cop #{i+1} · {c.date}{c.amount?` · ${c.amount}`:""}</button>)}</div>}
+    {strain.cops.length>1&&<div style={{display:"flex",gap:6,marginBottom:16,overflowX:"auto"}}>{strain.cops.map((c,i)=><button key={c.id} onClick={()=>setCopIdx(i)} style={{padding:"6px 14px",borderRadius:20,fontSize:11,fontFamily:"inherit",cursor:"pointer",whiteSpace:"nowrap",fontWeight:copIdx===i?500:400,background:copIdx===i?typeTheme.accent:"transparent",color:copIdx===i?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:copIdx===i?"none":`0.5px solid ${typeTheme.cardBorder}`}}>cop #{i+1} · {c.date}{c.amount?` · ${c.amount}`:""}</button>)}</div>}
 
     {/* Detail tabs */}
     {visibleTabs.length>1&&<div style={{display:"flex",gap:4,marginBottom:20}}>{visibleTabs.map(t=>(
@@ -2442,7 +2442,10 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
   const liveStrain=strains.find(s=>s.id===selectedStrain.id)||null;
   const isReal=!!liveStrain;
   const strain=liveStrain||selectedStrain;
-  const cop=strain.cops?.[0];
+  const cops=strain.cops||[];
+  // default to the most recent cop — cops[] is appended to, so [0] is the oldest
+  const[copIdx,setCopIdx]=useState(Math.max(0,cops.length-1));
+  const cop=cops[Math.min(copIdx,cops.length-1)];
   const session=cop?.session;
   const canEdit=isReal&&cop?.status==="on-hand";
   // same rule as mobile — hide a tab that's empty and can't be added to
@@ -2521,6 +2524,13 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
           <div style={{display:"flex",gap:4,marginBottom:10}}>
             <span style={{padding:"4px 10px",borderRadius:12,fontSize:10,background:`${theme.accent}30`,color:theme.text,border:`0.5px solid ${theme.accent}40`}}>cop 1 · {cop?.date||"—"}</span>
           </div>
+
+          {/* Cop switcher — re-copped strains keep every cop's own notes/experiences */}
+          {cops.length>1&&<div style={{display:"flex",gap:3,marginBottom:8,overflowX:"auto"}}>
+            {cops.map((c,i)=>(
+              <button key={c.id} onClick={()=>setCopIdx(i)} style={{padding:"4px 10px",borderRadius:16,fontSize:9,fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap",cursor:"pointer",background:copIdx===i?`${theme.accent}30`:"transparent",border:`1px solid ${copIdx===i?theme.accent:theme.cardBorder}`,color:copIdx===i?theme.text:theme.dimText}}>cop #{i+1}{c.date?` · ${c.date}`:""}</button>
+            ))}
+          </div>}
 
           {/* Tabs */}
           <div style={{display:"flex",gap:3,marginBottom:12}}>
@@ -3869,7 +3879,7 @@ function MobileShell(){
     setStrains(updated);setMixQueue(mixQueue.filter(q=>q.id!==editEntry.id));reset("mix");setEditEntry(null);setView(null);
   };
 
-  const openDetail=(s,copIdx,origin)=>{setDetailStrain(s);setDetailCopIdx(copIdx||0);setDetailTab("overview");setDetailOrigin(origin||page);setPage("detail");setMenuOpen(false);setMixMode(null);setMixWith(null);window.scrollTo(0,0);};
+  const openDetail=(s,copIdx,origin)=>{setDetailStrain(s);setDetailCopIdx(copIdx??Math.max(0,(s.cops?.length||1)-1));setDetailTab("overview");setDetailOrigin(origin||page);setPage("detail");setMenuOpen(false);setMixMode(null);setMixWith(null);window.scrollTo(0,0);};
   const openDetailTab=(s,tab,origin)=>{setDetailStrain(s);setDetailCopIdx(s.cops.length-1);setDetailTab(tab);setDetailOrigin(origin||page);setPage("detail");setMenuOpen(false);setMixMode(null);setMixWith(null);window.scrollTo(0,0);};
 
   // ── Navigation ──
@@ -3885,7 +3895,7 @@ function MobileShell(){
       case "home": return <HomePage strains={strains} onHand={onHand} coppedEntries={coppedEntries} mixQueue={mixQueue} finishedReups={finishedReups} onNavigate={navigate} onLogCop={()=>{setPage("stash");setMenuOpen(false);setView("reupPicker");window.scrollTo(0,0);}} onOpenDetail={openDetail} savedComparisons={savedComparisons} savedTips={savedTips}/>;
       case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveLiteCop={handleSaveLiteCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
       case "library": return <LibraryPage strains={strains} legacyStrains={legacyStrains} onOpenDetail={openDetail} onPeek={s=>setPeekStrain(s)}/>;
-      case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
+      case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} setCopIdx={setDetailCopIdx} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
       case "insights": return <InsightsPage strains={strains} onHand={onHand} onPeek={s=>setPeekStrain(s)} dismissed={insightsDismissed} setDismissed={setInsightsDismissed} saved={insightsSaved} setSaved={setInsightsSaved}/>;
       case "compare": return <ComparePage strains={strains} reups={[...reups,...finishedReups]} savedComparisons={savedComparisons} onSaveComparison={c=>{setSavedComparisons(prev=>[c,...prev]);}} onDeleteComparison={id=>setSavedComparisons(prev=>prev.filter(c=>c.id!==id))} onPeek={s=>setPeekStrain(s)}/>;
       case "recommender": return <RecommenderPage strains={strains} reups={[...reups,...finishedReups]} savedTips={savedTips} onSaveTip={t=>setSavedTips(prev=>[t,...prev])} onDeleteTip={id=>setSavedTips(prev=>prev.filter(t=>t.id!==id))} onPeek={s=>setPeekStrain(s)}/>;
