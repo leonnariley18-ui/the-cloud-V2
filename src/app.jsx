@@ -17,6 +17,46 @@ const VIBE_TAGS=Object.values(VIBE_CATEGORIES).flat();
 const today=()=>new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"});
 const isoToDisplayDate=iso=>{if(!iso)return null;const d=new Date(iso+"T00:00:00");return isNaN(d.getTime())?null:d.toLocaleDateString("en-US",{month:"short",day:"numeric"});};
 const todayIso=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+
+/* ── dates ──────────────────────────────────────────────────────────────────
+   `date` stays a year-less display string ("Jul 19") so no UI text changes.
+   `dateIso` ("2026-07-19") is its sortable, unambiguous twin, used for library
+   grouping, month ordering and day counts. Reads go through resolveIso, which
+   falls back to inference so records predating the field still work.        */
+const LEGACY_DATA_YEAR=2026;   // every record that predates dateIso was logged in 2026
+const isoOf=(dateStr,year)=>{
+  if(!dateStr)return null;
+  const d=new Date(`${dateStr} ${year}`);
+  if(isNaN(d.getTime()))return null;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+// runtime fallback: assume the most recent occurrence of that day/month.
+// NOT used for the backfill — that pins LEGACY_DATA_YEAR, or "Dec 25" would land in 2025.
+const inferIso=dateStr=>{
+  if(!dateStr)return null;
+  const now=new Date();
+  const thisYear=isoOf(dateStr,now.getFullYear());
+  if(!thisYear)return null;
+  if(new Date(thisYear+"T00:00:00").getTime()>now.getTime()+86400000)return isoOf(dateStr,now.getFullYear()-1);
+  return thisYear;
+};
+const stamp=()=>({date:today(),dateIso:todayIso()});
+const resolveIso=rec=>rec?.dateIso||inferIso(rec?.date);
+const monthKeyOf=rec=>resolveIso(rec)?.slice(0,7)||"unknown";           // "2026-07", sorts lexically
+const sortMonthKeys=keys=>[...keys].sort((a,b)=>{                        // newest first, "unknown" last
+  if(a===b)return 0;
+  if(a==="unknown")return 1;
+  if(b==="unknown")return -1;
+  return a<b?1:-1;
+});
+const monthLabel=key=>{
+  if(!key||key==="unknown")return"unknown";
+  const[y,m]=key.split("-");
+  const name=new Date(`${y}-${m}-01T00:00:00`).toLocaleDateString("en-US",{month:"long"});
+  return Number(y)===new Date().getFullYear()?name:`${name} ${y}`;
+};
+// one-time, idempotent: fill dateIso on records that predate the field
+const backfillIso=rec=>!rec||rec.dateIso||!rec.date?rec:{...rec,dateIso:isoOf(rec.date,LEGACY_DATA_YEAR)};
 const typeColor=t=>({"Sativa":"#C9A84C","Indica":"#7B6B9E","Hybrid":"#6B7F5A"}[t]||"#8C7E6A");
 const copAgainColor=v=>({"Yes":"#6B7F5A","Maybe":"#C17F4A","No":"#8C7E6A","Never again":"#C15A4A"}[v]||"#8C7E6A");
 const intentBadge=i=>({asleep:{bg:"#1A1A2E",color:"#C9B8F0",icon:"🌙"},awake:{bg:"#FFF3E8",color:"#C17F4A",icon:"☀️",border:"0.5px solid #E8D0B0"},adventure:{bg:"#EDF2E8",color:"#6B7F5A",icon:"🏕️"}}[i]||null);
@@ -36,11 +76,12 @@ const HISTORICAL_REUPS=[
 // Shared by both shells so the two lite flows can't drift apart.
 function makeLiteCop(cop,reupId){
   const copId=Date.now();const strainId=cop.existingStrainId||copId+1;
+  const copIso=cop.copDate||todayIso();
   const copDate=isoToDisplayDate(cop.copDate)||today();
-  const newCop={id:copId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand||"",growType:cop.growType||"",terpenes:[...cop.terpenes],date:copDate,firstNotes:cop.notes,status:"on-hand",intent:cop.intent||null,amount:cop.amount||null,reupId:reupId||null,
+  const newCop={id:copId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand||"",growType:cop.growType||"",terpenes:[...cop.terpenes],date:copDate,dateIso:copIso,firstNotes:cop.notes,status:"on-hand",intent:cop.intent||null,amount:cop.amount||null,reupId:reupId||null,
     session:null,lite:true,experiences:[],mixes:[],notes:[]};
-  const onHandEntry={strainName:cop.name.trim(),strainId,copId,type:cop.type,terpenes:[...cop.terpenes],date:copDate,rating:null,lite:true};
-  return{copId,strainId,newCop,onHandEntry,copDate,copIso:cop.copDate||todayIso()};
+  const onHandEntry={strainName:cop.name.trim(),strainId,copId,type:cop.type,terpenes:[...cop.terpenes],date:copDate,dateIso:copIso,rating:null,lite:true};
+  return{copId,strainId,newCop,onHandEntry,copDate,copIso};
 }
 
 // A lite re-up is a backfill, so it takes the date of its earliest cop rather
@@ -203,17 +244,22 @@ function PlaceholderPage({id,title,sub,desc}){
 /* ═══════════════════════════════════════════
    HOW TO USE MODAL
    ═══════════════════════════════════════════ */
+const HOW_TO_SECTIONS=[
+  {title:"home",icon:"🏠",lines:["your dashboard. on-hand strains grouped by intent, active re-ups, mix queue count.","saved comparisons and saved tips show up here when you have them — otherwise the space stays clean.","everything links out to the relevant page."]},
+  {title:"stash",icon:"🌿",lines:["your active world. log a new cop, track what's on hand, what's ready to try, what needs a mix review.","tap a strain name to open its full detail. note · experience · mix expand inline — no page jump.","mix two on-hand strains from stash — they land in the mix queue for review later.","finished ✓ closes a cop and asks if you'd still cop again."]},
+  {title:"re-ups",icon:"📦",lines:["re-ups group cops from the same haul. up to 2 open at a time, auto-numbered from your history.","a re-up closes itself once every cop in it is finished and nothing's left to review.","an empty re-up can be deleted — the numbers close up behind it, no gaps."]},
+  {title:"lite re-ups",icon:"🌬️",lines:["for bud you already started smoking before you logged it. skips the first sesh entirely and drops straight into on hand.","same full cop form, same re-up numbering — you just don't get asked for a rating, spectrums, taste or vibes up front.","set the cop date to when you actually picked it up. the re-up backdates itself to its earliest cop.","you can still rate a lite cop any time from its detail page, vote cop-again when you finish it, and log notes / experiences / mixes forever.","until you rate one it stays out of every average, so it can't drag your numbers down.","spectrums, smokes-like and the first-sesh tag snapshot are gone for good on these — that's the tradeoff."]},
+  {title:"library",icon:"📚",lines:["everything you've ever had, in timeline order. strains / mixes / legacy tabs.","filter by starred, cop-again, or rating. search by name, parent, terpene, or vibe tag.","legacy tab holds strains you remember but never formally logged in cLOUD."]},
+  {title:"insights",icon:"📊",lines:["a social media-style feed of your own data. seven accounts post insights about your patterns — terpenes, mixes, outdoor, bedtime, brands, body type, intent.","dismiss posts from your feed. they still live on each account's profile page.","save posts to your profile with 🔖. tap your avatar to see saved insights and the accounts you follow.","unrated cops sit out of every average — a strain only counts once you've actually rated it."]},
+  {title:"compare",icon:"⚖️",lines:["pick two strains (A/B), see them side by side on spectrums, terpenes, vibes, sesh notes.","save a comparison — it shows up on home.","only rated strains show up in the picker."]},
+  {title:"recommender",icon:"✦",lines:["your terpene fingerprint by intent — overall, asleep, awake, adventure.","top terps, winning combos (pairs + trios), and a tip card you can save.","saved tips show up on home as your what-to-cop reference.","'might enjoy' tab surfaces parent strains of your 5★, starred, and cop-again-yes strains that you haven't tried yet.","terp search (🔍) lets you hunt by terpene."]},
+  {title:"cop form",icon:"📋",lines:["intent (🌙☀️🏕️) and amount live at the top of the form.","re-cop an existing strain by selecting it from suggestions — keeps your history connected.","lite cops get an extra date field so you can backdate them."]},
+  {title:"strain detail",icon:"🔍",lines:["type-themed background (indica purple, sativa gold, hybrid green).","four tabs: overview (spectrums, terpenes, vibes), notes, experiences, mixes.","tabs hide themselves when they're empty and there's nothing you could add — finished cops stop showing you dead ends.","add experiences from stash or detail — captures setting, bedtime, vibes, and free notes.","re-copped a strain? the cop switcher pills at the top move between batches. you land on the most recent one."]},
+  {title:"desktop",icon:"🖥️",lines:["add #desktop to the url on a big screen for the full desktop shell.","stash is an overlay there, not a page — it slides in over whatever you're looking at.","library and recommender get browser-style chrome; insights reads like a feed.","everything syncs live with mobile — same data, same second."]},
+];
+
 function HowToModal({onClose}){
-  const sections=[
-    {title:"home",icon:"🏠",lines:["your dashboard. on-hand strains grouped by intent, active re-ups, mix queue count.","saved comparisons and saved tips show up here when you have them — otherwise the space stays clean.","everything links out to the relevant page."]},
-    {title:"stash",icon:"🌿",lines:["your active world. log a new cop, track what's on hand, what's ready to try, what needs a mix review.","tap a strain name to open its full detail. note · experience · mix expand inline — no page jump.","mix two on-hand strains from stash — they land in the mix queue for review later.","finished ✓ closes a cop and asks if you'd still cop again."]},
-    {title:"library",icon:"📚",lines:["everything you've ever had, in timeline order. strains / mixes / legacy tabs.","filter by starred, cop-again, or rating. search by name, parent, terpene, or vibe tag.","legacy tab holds strains you remember but never formally logged in cLOUD."]},
-    {title:"insights",icon:"📊",lines:["a social media-style feed of your own data. seven accounts post insights about your patterns — terpenes, mixes, outdoor, bedtime, brands, body type, intent.","dismiss posts from your feed. they still live on each account's profile page.","save posts to your profile with 🔖. tap your avatar to see saved insights and the accounts you follow.","pinned posts (body type + intent) always stay visible and update with your latest data."]},
-    {title:"compare",icon:"⚖️",lines:["pick two strains (A/B), see them side by side on spectrums, terpenes, vibes, sesh notes.","save a comparison — it shows up on home."]},
-    {title:"recommender",icon:"✦",lines:["your terpene fingerprint by intent — overall, asleep, awake, adventure.","top terps, winning combos (pairs + trios), and a tip card you can save.","saved tips show up on home as your what-to-cop reference.","'might enjoy' tab surfaces parent strains of your 5★, starred, and cop-again-yes strains that you haven't tried yet.","terp search (🔍) lets you pick up to 3 logged terpenes and see what they do for you: vibes, notes, conditions, intent + type lean."]},
-    {title:"cop form",icon:"📦",lines:["intent (🌙☀️🏕️) and amount live at the top of the form.","re-cop an existing strain by selecting it from suggestions — keeps your history connected.","re-ups group cops from the same haul. up to 2 open at a time. auto-numbered from your history."]},
-    {title:"strain detail",icon:"🔍",lines:["type-themed background (indica purple, sativa gold, hybrid green).","four tabs: overview (spectrums, terpenes, vibes), notes, experiences, mixes.","add experiences from stash or detail — captures setting, bedtime, vibes, and free notes.","if you've re-copped, use the cop switcher pills to compare across batches."]},
-  ];
+  const sections=HOW_TO_SECTIONS;
   return(<div style={{position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
     <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(44,36,32,0.4)"}}/>
     <div style={{position:"relative",background:"#FAF6F0",borderRadius:"20px 20px 0 0",padding:"28px 24px 48px",width:"100%",height:"92vh",overflowY:"auto",boxShadow:"0 -4px 32px rgba(44,36,32,0.12)"}}>
@@ -402,8 +448,8 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
           {total===0&&<button onClick={()=>handleDeleteReup(r.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#C15A4A",fontFamily:"inherit",padding:0,marginTop:8}}>{confirmDeleteItem==="reup-"+r.id?"confirm delete?":"delete empty re-up"}</button>}
         </div>);
       })}</>}
-      {reups.filter(r=>!r.closed).length<2&&<><button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,date:today(),closed:false,copIds:[],coppedIds:[]};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:reups.filter(r=>!r.closed).length>0?8:0}}>+ start a new re-up</button>
-      <button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,date:today(),closed:false,copIds:[],coppedIds:[],lite:true};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:"transparent",color:"rgba(240,235,225,0.65)",border:"0.5px solid rgba(240,235,225,0.18)",cursor:"pointer",fontFamily:"inherit",marginTop:8}}>+ start a lite re-up</button>
+      {reups.filter(r=>!r.closed).length<2&&<><button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,...stamp(),closed:false,copIds:[],coppedIds:[]};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:reups.filter(r=>!r.closed).length>0?8:0}}>+ start a new re-up</button>
+      <button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,...stamp(),closed:false,copIds:[],coppedIds:[],lite:true};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:"transparent",color:"rgba(240,235,225,0.65)",border:"0.5px solid rgba(240,235,225,0.18)",cursor:"pointer",fontFamily:"inherit",marginTop:8}}>+ start a lite re-up</button>
       <p style={{fontSize:10,color:"rgba(240,235,225,0.35)",margin:"6px 0 0",textAlign:"center",lineHeight:1.4}}>skips the first sesh — for what you're already smoking 🌿</p></>}
       {reups.filter(r=>!r.closed).length>=2&&<p style={{fontSize:11,color:"rgba(240,235,225,0.4)",margin:"8px 0 0",fontStyle:"italic",textAlign:"center"}}>you can have up to 2 open re-ups at a time</p>}
     </GlassCard>
@@ -612,11 +658,11 @@ function LibraryPage({strains,legacyStrains,onOpenDetail,onPeek}){
   const monthGroups={};
   activeStrains.forEach(s=>{
     const lc=getLatestCop(s);if(!lc)return;
-    const month=lc.date?.replace(/\s+\d+$/,"").trim()||"unknown";
+    const month=monthKeyOf(lc);
     if(!monthGroups[month])monthGroups[month]=[];
     monthGroups[month].push(s);
   });
-  const monthOrder=Object.keys(monthGroups);
+  const monthOrder=sortMonthKeys(Object.keys(monthGroups));
   const allMixes=strains.flatMap(s=>s.cops.flatMap(c=>(c.mixes||[]).filter(m=>m.status==="reviewed").map(m=>({...m,strainName:s.name,strainId:s.id,copType:c.type}))));
   const uniqueMixes=[];const seenShared=new Set();
   allMixes.forEach(m=>{if(m.sharedId&&seenShared.has(m.sharedId))return;if(m.sharedId)seenShared.add(m.sharedId);uniqueMixes.push(m);});
@@ -642,7 +688,7 @@ function LibraryPage({strains,legacyStrains,onOpenDetail,onPeek}){
       {monthOrder.length===0&&<p style={{fontSize:13,color:D.muted}}>no strains logged yet</p>}
       {monthOrder.map(month=><div key={month} style={{marginBottom:28}}>
         <div onClick={()=>toggleMonth(month)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",marginBottom:collapsedMonths[month]?0:14,borderBottom:`0.5px solid ${D.border}`,paddingBottom:8}}>
-          <p style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:400,color:D.amber,margin:0}}>{month}</p>
+          <p style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:400,color:D.amber,margin:0}}>{monthLabel(month)}</p>
           <span style={{fontSize:11,color:D.muted,userSelect:"none"}}>{collapsedMonths[month]?`${monthGroups[month].length} strain${monthGroups[month].length!==1?"s":""}  ▸`:"▾"}</span>
         </div>
         {!collapsedMonths[month]&&monthGroups[month].map(s=>{const lc=getLatestCop(s);const ls=lc?.session;const locked=isNeverAgain(s);
@@ -741,13 +787,15 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
   const[p2,setP2]=useState("");
   const[unknownLineage,setUnknownLineage]=useState(false);
   const cop=strain?.cops?.[copIdx];
+  // reads tabProp, not the derived `tab` below — a dep array is evaluated during
+  // render, so referencing the later const would hit the temporal dead zone
   useEffect(()=>{
     if(!cop)return;
-    if(cop.status==="done"&&tab!=="overview"){
-      const hasContent=tab==="notes"?(cop.notes||[]).length>0:tab==="experiences"?(cop.experiences||[]).length>0:tab==="mixes"?(cop.mixes||[]).length>0:true;
+    if(cop.status==="done"&&tabProp!=="overview"){
+      const hasContent=tabProp==="notes"?(cop.notes||[]).length>0:tabProp==="experiences"?(cop.experiences||[]).length>0:tabProp==="mixes"?(cop.mixes||[]).length>0:true;
       if(!hasContent)setTab("overview");
     }
-  },[cop?.id,cop?.status,tab]);
+  },[cop?.id,cop?.status,tabProp]);
   if(!strain)return null;
   const s=cop?.session;
   const locked=strain.cops.some(c=>c.session?.copAgain==="Never again");
@@ -2078,13 +2126,17 @@ function useCloudData(){
     const{data:rows,error}=await supabase.from("cloud_data").select("*").eq("user_id",USER_ID).maybeSingle();
     console.log("loadData rows:",rows,"error:",error);
     const initialData=rows?.data||{};
-    const migratedStrains=(initialData.strains||[]).map(s=>({...s,parents:s.unknownLineage?["unknown lineage"]:(s.parents||[]).map(p=>p.trim()).filter(Boolean)}));
+    // backfillIso is idempotent — it only fills where dateIso is absent, so this
+    // is safe to leave in place and safe to re-run. Persists via the autosave effect.
+    const migratedStrains=(initialData.strains||[]).map(s=>({...s,
+      parents:s.unknownLineage?["unknown lineage"]:(s.parents||[]).map(p=>p.trim()).filter(Boolean),
+      cops:(s.cops||[]).map(backfillIso)}));
     setStrains(migratedStrains);
-    setCoppedEntries(initialData.coppedEntries||[]);
-    setOnHand(initialData.onHand||[]);
+    setCoppedEntries((initialData.coppedEntries||[]).map(backfillIso));
+    setOnHand((initialData.onHand||[]).map(backfillIso));
     setMixQueue(initialData.mixQueue||[]);
-    const rawReups=initialData.reups||[];
-    const rawFinished=initialData.finishedReups||[];
+    const rawReups=(initialData.reups||[]).map(backfillIso);
+    const rawFinished=(initialData.finishedReups||[]).map(backfillIso);
     const{finished:numberedFinished,active:numberedActive}=assignReupNumbers(rawFinished,rawReups);
     setReups(numberedActive);
     setFinishedReups(numberedFinished);
@@ -2174,7 +2226,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
     const newId="r"+Date.now();
     const allAssignedNumbers=[...finishedReups,...openReups].map(x=>x.number||0);
     const nextNum=allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1;
-    setReups([...openReups,{id:newId,date:today(),closed:false,copIds:[],coppedIds:[],number:nextNum,...(lite?{lite:true}:{})}]);
+    setReups([...openReups,{id:newId,...stamp(),closed:false,copIds:[],coppedIds:[],number:nextNum,...(lite?{lite:true}:{})}]);
     setActiveReupId(newId);
   };
 
@@ -2201,7 +2253,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
   const handleSaveCop=()=>{
     if(!cop.name.trim())return;
     const newId=Date.now();
-    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,date:today(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
+    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
     resetCop();
     setFormOpen(false);
@@ -2374,9 +2426,12 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
 function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finishedReups,onSelectStrain}){
   if(!stashOpen)return null;
   const getTypeColor=t=>({"Sativa":"#C9A84C","Indica":"#7B6B9E","Hybrid":"#6B7F5A"}[t]||"#8C7E6A");
-  const daysSince=dateStr=>{
-    if(!dateStr)return null;
-    const d=new Date(dateStr);
+  // takes the record so it can use dateIso; falls back to inferring from the
+  // year-less display string for anything predating that field
+  const daysSince=rec=>{
+    const iso=typeof rec==="string"?inferIso(rec):resolveIso(rec);
+    if(!iso)return null;
+    const d=new Date(iso+"T00:00:00");
     if(isNaN(d.getTime()))return null;
     return Math.max(0,Math.floor((Date.now()-d.getTime())/86400000));
   };
@@ -2437,7 +2492,7 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
           {onHand.map(oh=>{
             const strain=strains.find(s=>s.id===oh.strainId);
             if(!strain)return null;
-            const days=daysSince(oh.date);
+            const days=daysSince(oh);
             const type=oh.type||strain.type;
             return(
               <StrainCard key={oh.copId||oh.strainId} name={strain.name} type={type}
@@ -2800,7 +2855,38 @@ const NAV_ITEMS=[
   {id:"recommender",icon:"✦",label:"recommender"},
 ];
 
-function DesktopSidebar({currentPage,onNavigate,synced,stashOpen}){
+function DesktopHowToModal({onClose}){
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.7)"}}/>
+      <div style={{position:"relative",zIndex:2,width:"100%",maxWidth:720,maxHeight:"86vh",display:"flex",flexDirection:"column",border:"2.5px solid rgba(232,200,154,0.5)",background:"#120D06",boxShadow:"6px 6px 0 rgba(0,0,0,0.5)"}}>
+        <div style={{background:"linear-gradient(90deg,#2C1D07,#4A2E0A,#2C1D07)",borderBottom:"2px solid rgba(232,200,154,0.2)",padding:"7px 12px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <div onClick={onClose} style={{width:14,height:14,border:"2px solid rgba(200,80,40,0.5)",color:"rgba(200,80,40,0.7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontFamily:"monospace",cursor:"pointer"}}>✕</div>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"rgba(232,200,154,0.6)",letterSpacing:1}}>HOW cLOUD WORKS</span>
+          <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.3)",marginLeft:"auto"}}>a reminder of your own system</span>
+        </div>
+        <div style={{overflowY:"auto",padding:"20px 24px 28px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:"20px 28px",alignItems:"start"}}>
+          {HOW_TO_SECTIONS.map(sec=>(
+            <div key={sec.title}>
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7,background:"linear-gradient(90deg,rgba(232,200,154,0.12),transparent)",borderLeft:"2px solid rgba(232,200,154,0.35)",padding:"4px 8px"}}>
+                <span style={{fontSize:12}}>{sec.icon}</span>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:"rgba(232,200,154,0.6)",letterSpacing:1,textTransform:"uppercase"}}>{sec.title}</span>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:5,paddingLeft:10}}>
+                {sec.lines.map((l,i)=><p key={i} style={{fontSize:11.5,color:"rgba(255,255,255,0.68)",margin:0,lineHeight:1.55}}>{l}</p>)}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{flexShrink:0,borderTop:"0.5px solid rgba(232,200,154,0.15)",padding:"10px 24px",fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.3)"}}>
+          V1 ARCHIVE · leonnariley18-ui.github.io/the-cloud
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DesktopSidebar({currentPage,onNavigate,synced,stashOpen,onOpenHelp}){
   const[hovered,setHovered]=useState(false);
   const w=hovered?208:64;
 
@@ -2830,6 +2916,10 @@ function DesktopSidebar({currentPage,onNavigate,synced,stashOpen}){
           {hovered&&<span style={{fontSize:11,color:"#E8C89A",textAlign:"center",marginTop:4}}>stash open</span>}
         </div>}
         <div style={{flex:1}}/>
+        <div onClick={onOpenHelp} style={{display:"flex",alignItems:"center",gap:16,padding:"0 20px",height:44,cursor:"pointer"}}>
+          <span style={{fontSize:18,width:24,textAlign:"center",flexShrink:0,color:"rgba(232,200,154,0.45)"}}>?</span>
+          {hovered&&<span style={{fontSize:13,color:"rgba(232,200,154,0.45)",whiteSpace:"nowrap"}}>how it works</span>}
+        </div>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 20px",height:24,marginBottom:4}}>
           <div style={{width:7,height:7,borderRadius:"50%",background:synced?"#4A7A4A":"#C15A4A",flexShrink:0}}/>
           {hovered&&<span style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:"rgba(232,200,154,0.25)",whiteSpace:"nowrap"}}>{synced?"synced":"syncing…"}</span>}
@@ -2893,11 +2983,11 @@ function DesktopLibraryPage({strains,legacyStrains,onSelectStrain}){
   const monthGroups={};
   activeStrains.forEach(s=>{
     const lc=getLatestCop(s);if(!lc)return;
-    const month=lc.date?.replace(/\s+\d+$/,"").trim()||"unknown";
+    const month=monthKeyOf(lc);
     if(!monthGroups[month])monthGroups[month]=[];
     monthGroups[month].push(s);
   });
-  const monthOrder=Object.keys(monthGroups);
+  const monthOrder=sortMonthKeys(Object.keys(monthGroups));
   const safeMonthIndex=Math.min(monthIndex,Math.max(0,monthOrder.length-1));
   const currentMonth=monthOrder[safeMonthIndex];
   const currentMonthStrains=currentMonth?monthGroups[currentMonth]:[];
@@ -2965,7 +3055,7 @@ function DesktopLibraryPage({strains,legacyStrains,onSelectStrain}){
 
           {currentMonth&&(<>
             <div style={{background:`linear-gradient(90deg,${A}1f,rgba(26,21,16,0.8))`,padding:"5px 10px",borderLeft:`2px solid ${A}59`,marginBottom:12,borderRadius:"0 4px 4px 0"}}>
-              <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:`${A}8c`,letterSpacing:1}}>{currentMonth.toUpperCase()} · {currentMonthStrains.length} STRAIN{currentMonthStrains.length!==1?"S":""}</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:`${A}8c`,letterSpacing:1}}>{monthLabel(currentMonth).toUpperCase()} · {currentMonthStrains.length} STRAIN{currentMonthStrains.length!==1?"S":""}</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
               {currentMonthStrains.map(s=>{
@@ -2987,7 +3077,7 @@ function DesktopLibraryPage({strains,legacyStrains,onSelectStrain}){
             </div>
             <div style={{marginTop:16,padding:"6px 10px",borderTop:"1px solid rgba(232,200,154,0.06)",display:"flex",justifyContent:"space-between"}}>
               <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.15)"}}>SHOWING {currentMonthStrains.length} OF {activeStrains.length} STRAINS</span>
-              <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.15)"}}>{currentMonth.toUpperCase()}</span>
+              <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.15)"}}>{monthLabel(currentMonth).toUpperCase()}</span>
             </div>
           </>)}
         </>)}
@@ -3550,6 +3640,7 @@ function DesktopShell(){
   const{synced,strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,setSavedComparisons,savedTips,setSavedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved}=useCloudData();
   const[page,setPage]=useState("home");
   const[stashOpen,setStashOpen]=useState(false);
+  const[helpOpen,setHelpOpen]=useState(false);
   const[selectedStrain,setSelectedStrain]=useState(null);
   const[detailTab,setDetailTab]=useState("overview");
 
@@ -3629,7 +3720,7 @@ function DesktopShell(){
   return(
     <div style={{fontFamily:"'DM Sans',sans-serif",display:"flex",height:"100vh",background:bg,transition:"background 0.3s"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-      <DesktopSidebar currentPage={page} onNavigate={navigate} synced={synced} stashOpen={stashOpen}/>
+      <DesktopSidebar currentPage={page} onNavigate={navigate} synced={synced} stashOpen={stashOpen} onOpenHelp={()=>setHelpOpen(true)}/>
       {!stashOpen&&(
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <DesktopTopBar page={page}/>
@@ -3649,6 +3740,8 @@ function DesktopShell(){
         </div>
       )}
 
+      {helpOpen&&<DesktopHowToModal onClose={()=>setHelpOpen(false)}/>}
+
       {/* Stash overlay */}
       <StashSidebar
         stashOpen={stashOpen}
@@ -3661,8 +3754,8 @@ function DesktopShell(){
       />
 
       {/* Detail window overlay */}
-      <StrainDetailWindow
-        key={selectedStrain?.id||"none"}
+      {selectedStrain&&<StrainDetailWindow
+        key={selectedStrain.id}
         selectedStrain={selectedStrain}
         detailTab={detailTab}
         setDetailTab={setDetailTab}
@@ -3675,7 +3768,7 @@ function DesktopShell(){
         onAddExperience={handleAddExperience}
         onFinishCop={handleFinishCop}
         onCreateMix={handleCreateMix}
-      />
+      />}
     </div>
   );
 }
@@ -3767,7 +3860,7 @@ function MobileShell(){
   const handleSaveCop=()=>{
     if(!cop.name.trim())return;
     const newId=Date.now();
-    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,date:today(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
+    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(reups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
     reset("cop");setActiveReupId(null);setView(null);
   };
@@ -3787,14 +3880,14 @@ function MobileShell(){
   const handleSaveSession=()=>{
     if(!editEntry)return;
     const copId=Date.now();const strainId=editEntry.strainId||copId+1;
-    const newCop={id:copId,type:editEntry.type,lean:editEntry.lean,source:editEntry.source,container:editEntry.container,brand:editEntry.brand||"",growType:editEntry.growType||"",terpenes:[...editEntry.terpenes],date:editEntry.date,firstNotes:editEntry.firstNotes,status:session.copAgain==="Never again"?"done":"on-hand",intent:editEntry.intent||null,amount:editEntry.amount||null,reupId:editEntry.reupId||null,
+    const newCop={id:copId,type:editEntry.type,lean:editEntry.lean,source:editEntry.source,container:editEntry.container,brand:editEntry.brand||"",growType:editEntry.growType||"",terpenes:[...editEntry.terpenes],date:editEntry.date,dateIso:resolveIso(editEntry),firstNotes:editEntry.firstNotes,status:session.copAgain==="Never again"?"done":"on-hand",intent:editEntry.intent||null,amount:editEntry.amount||null,reupId:editEntry.reupId||null,
       session:{rating:session.rating,smokesLike:session.smokesLike,smokesLikeLean:session.smokesLikeLean,setting:session.setting,bedtime:session.bedtime,spectrums:{sw:session.sw,sf:session.sf},pull:session.pull,tasteTags:[...session.tasteTags],vibeTags:[...session.vibeTags],notes:session.notes,copAgain:session.copAgain,date:today()},
       experiences:[],mixes:[],notes:[]};
     const intentForStrain=editEntry.intent||null;
     if(editEntry.strainId){setStrains(strains.map(s=>s.id!==editEntry.strainId?s:{...s,intent:s.intent||intentForStrain,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:editEntry.strainName,parents:editEntry.unknownLineage?["unknown lineage"]:[editEntry.parent1,editEntry.parent2].filter(Boolean),intent:intentForStrain,cops:[newCop]},...strains]);}
     if(editEntry.reupId)setReups(reups.map(r=>r.id!==editEntry.reupId?r:{...r,coppedIds:(r.coppedIds||[]).filter(id=>id!==editEntry.id),copIds:[...r.copIds,copId]}));
-    if(session.copAgain!=="Never again")setOnHand([{strainName:editEntry.strainName,strainId:strainId,copId:copId,type:editEntry.type,terpenes:[...editEntry.terpenes],date:editEntry.date,rating:session.rating},...onHand]);
+    if(session.copAgain!=="Never again")setOnHand([{strainName:editEntry.strainName,strainId:strainId,copId:copId,type:editEntry.type,terpenes:[...editEntry.terpenes],date:editEntry.date,dateIso:resolveIso(editEntry),rating:session.rating},...onHand]);
     setCoppedEntries(coppedEntries.filter(e=>e.id!==editEntry.id));
     reset("session");setEditEntry(null);setView(null);
   };
