@@ -30,6 +30,16 @@ const HISTORICAL_REUPS=[
   {date:"Jun 6",strainNames:["Black Panther","Moroccan Peaches","Durban Mints","Mule Fuel"]},
   {date:"Jun 14",strainNames:["Memory Loss OG"]},
 ];
+// Builds the cop + on-hand records for a lite cop (no first session).
+// Shared by both shells so the two lite flows can't drift apart.
+function makeLiteCop(cop,reupId){
+  const copId=Date.now();const strainId=cop.existingStrainId||copId+1;
+  const newCop={id:copId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand||"",growType:cop.growType||"",terpenes:[...cop.terpenes],date:today(),firstNotes:cop.notes,status:"on-hand",intent:cop.intent||null,amount:cop.amount||null,reupId:reupId||null,
+    session:null,lite:true,experiences:[],mixes:[],notes:[]};
+  const onHandEntry={strainName:cop.name.trim(),strainId,copId,type:cop.type,terpenes:[...cop.terpenes],date:today(),rating:null,lite:true};
+  return{copId,strainId,newCop,onHandEntry};
+}
+
 function assignReupNumbers(finished,active){
   let nextNum=HISTORICAL_REUPS.length+1;
   const numberedFinished=finished.map(r=>{
@@ -99,6 +109,7 @@ const ToggleGroup=({options,value,onChange,color=P.sage})=>(<div style={{display
 const SubToggle=({options,value,onChange,color=P.sage,label="hybrid lean:"})=>(<div style={{paddingLeft:12,borderLeft:`2px solid ${color}`,marginTop:8}}><p style={{fontSize:11,color:P.textMuted,margin:"0 0 6px"}}>{label}</p><div style={{display:"flex",gap:6}}>{options.map(o=>(<button key={o} onClick={()=>onChange(o)} style={{flex:1,padding:8,borderRadius:6,fontSize:12,fontFamily:"inherit",cursor:"pointer",fontWeight:value===o?500:400,background:value===o?color:P.bg,color:value===o?P.cream:P.textMuted,border:value===o?"none":`0.5px solid ${P.border}`,transition:"all 0.15s"}}>{o.toLowerCase()}</button>))}</div></div>);
 const SpectrumSlider=({left,right,value,onChange,color=P.plum})=>{const labels={[-3]:`deeply ${left.toLowerCase()}`,[-2]:left.toLowerCase(),[-1]:`leaning ${left.toLowerCase()}`,[0]:"neutral",[1]:`leaning ${right.toLowerCase()}`,[2]:right.toLowerCase(),[3]:`deeply ${right.toLowerCase()}`};return(<div style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:12,color:P.text,fontWeight:500}}>{left.toLowerCase()}</span><span style={{fontSize:12,color:P.text,fontWeight:500}}>{right.toLowerCase()}</span></div><div style={{display:"flex",gap:4}}>{[-3,-2,-1,0,1,2,3].map(n=>(<button key={n} onClick={()=>onChange(n)} style={{flex:1,height:34,borderRadius:7,cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s",background:value===n?color:P.bg,border:value===n?"none":`0.5px solid ${P.border}`}}><div style={{width:value===n?(Math.abs(n)===3?16:12):5,height:value===n?(Math.abs(n)===3?16:12):5,borderRadius:"50%",margin:"0 auto",background:value===n?P.cream:P.borderDark,transition:"all 0.15s"}}/></button>))}</div><p style={{fontSize:11,color:P.textMuted,textAlign:"center",margin:"5px 0 0"}}>{labels[value]||"neutral"}</p></div>);};
 const SpectrumDisplay=({left,right,val,color})=>(<div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:P.textMuted,marginBottom:3}}><span>{left.toLowerCase()}</span><span>{right.toLowerCase()}</span></div><div style={{display:"flex",gap:3}}>{[-3,-2,-1,0,1,2,3].map(n=>(<div key={n} style={{flex:1,height:20,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",background:val===n?color:P.bg,border:val===n?"none":`0.5px solid ${P.border}`}}><div style={{width:val===n?(Math.abs(n)===3?10:7):3,height:val===n?(Math.abs(n)===3?10:7):3,borderRadius:"50%",background:val===n?P.cream:P.borderDark}}/></div>))}</div></div>);
+const DarkSpectrumDisplay=({left,right,val,theme})=>(<div style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>{left.toLowerCase()}</span><span>{right.toLowerCase()}</span></div><div style={{display:"flex",gap:3}}>{[-3,-2,-1,0,1,2,3].map(n=>(<div key={n} style={{flex:1,height:20,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",background:val===n?theme.accent:theme.cardBg,border:val===n?"none":`0.5px solid ${theme.cardBorder}`}}><div style={{width:val===n?(Math.abs(n)===3?10:7):3,height:val===n?(Math.abs(n)===3?10:7):3,borderRadius:"50%",background:val===n?"#fff":theme.dimText}}/></div>))}</div></div>);
 
 const IntentBadge=({intent})=>{const b=intentBadge(intent);if(!b)return null;return <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:b.bg,color:b.color,border:b.border||"none"}}>{b.icon}</span>;};
 
@@ -317,7 +328,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   view,setView,cop,setCop,session,setSession,editEntry,setEditEntry,
   activeReupId,setActiveReupId,mixSess,setMixSess,
   finishingCop,finishCopAgain,setFinishCopAgain,
-  handleSaveCop,handleSaveSession,handleMarkDone,handleConfirmDone,
+  handleSaveCop,handleSaveLiteCop,handleSaveSession,handleMarkDone,handleConfirmDone,
   handleReviewMix,handleSaveMixReview,
   setCoppedIntent,setCoppedAmount,setFinishingCop,
   openDetail,openDetailTab,reset,showSugg,setShowSugg,legacyStrains,handleAddReup,handleDeleteReup,confirmDeleteItem,
@@ -337,6 +348,10 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   const[expSheet,setExpSheet]=useState(null);
   const[mixReviewSheet,setMixReviewSheet]=useState(false);
   const closeInline=()=>{setInlineCard(null);setInlineText("");setInlineMixWith("");};
+
+  const activeReup=reups.find(r=>r.id===activeReupId);
+  const isLite=!!activeReup?.lite;
+  const liteAdded=isLite?strains.flatMap(s=>s.cops.filter(c=>(activeReup.copIds||[]).includes(c.id)).map(()=>s.name)):[];
 
   const mismatch=editEntry&&session.smokesLike&&editEntry.type&&(()=>{
     const label=editEntry.lean?`${editEntry.lean.toLowerCase()} ${editEntry.type.toLowerCase()}`:editEntry.type.toLowerCase();
@@ -361,7 +376,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
         return(<div key={r.id} style={{display:"block",width:"100%",textAlign:"left",background:"rgba(240,235,225,0.06)",borderRadius:10,padding:14,marginBottom:8,border:"0.5px solid rgba(240,235,225,0.1)",fontFamily:"inherit"}}>
           <button onClick={()=>{setActiveReupId(r.id);setView("cop");}} style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-              <span style={{fontSize:14,fontWeight:500,color:"#F0EBE1"}}>re-up #{r.number||"?"} · {r.date}</span>
+              <span style={{fontSize:14,fontWeight:500,color:"#F0EBE1"}}>re-up #{r.number||"?"} · {r.date}{r.lite&&<span style={{fontSize:9,marginLeft:6,padding:"2px 7px",borderRadius:8,background:"rgba(240,235,225,0.12)",color:"rgba(240,235,225,0.55)",fontWeight:400,letterSpacing:0.3}}>lite 🌬️</span>}</span>
               <span style={{fontSize:11,color:"rgba(240,235,225,0.5)"}}>{total} strain{total!==1?"s":""}</span>
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
@@ -372,14 +387,20 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
           {total===0&&<button onClick={()=>handleDeleteReup(r.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#C15A4A",fontFamily:"inherit",padding:0,marginTop:8}}>{confirmDeleteItem==="reup-"+r.id?"confirm delete?":"delete empty re-up"}</button>}
         </div>);
       })}</>}
-      {reups.filter(r=>!r.closed).length<2&&<button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,date:today(),closed:false,copIds:[],coppedIds:[]};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:reups.filter(r=>!r.closed).length>0?8:0}}>+ start a new re-up</button>}
+      {reups.filter(r=>!r.closed).length<2&&<><button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,date:today(),closed:false,copIds:[],coppedIds:[]};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit",marginTop:reups.filter(r=>!r.closed).length>0?8:0}}>+ start a new re-up</button>
+      <button onClick={()=>{const newId="r"+Date.now();const newReup={id:newId,date:today(),closed:false,copIds:[],coppedIds:[],lite:true};handleAddReup(newReup);setActiveReupId(newId);setView("cop");}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:"transparent",color:"rgba(240,235,225,0.65)",border:"0.5px solid rgba(240,235,225,0.18)",cursor:"pointer",fontFamily:"inherit",marginTop:8}}>+ start a lite re-up</button>
+      <p style={{fontSize:10,color:"rgba(240,235,225,0.35)",margin:"6px 0 0",textAlign:"center",lineHeight:1.4}}>skips the first sesh — for what you're already smoking 🌿</p></>}
       {reups.filter(r=>!r.closed).length>=2&&<p style={{fontSize:11,color:"rgba(240,235,225,0.4)",margin:"8px 0 0",fontStyle:"italic",textAlign:"center"}}>you can have up to 2 open re-ups at a time</p>}
     </GlassCard>
   </Wrapper>);
 
   // ═══ COP FORM (V2: intent + amount at top) ═══
   if(view==="cop")return(<Wrapper>
-    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}><BackBtn onClick={()=>{reset("cop");setView(null);}}/><div><h2 style={{fontSize:20,fontWeight:500,margin:0,color:"#F0EBE1"}}>new cop</h2><p style={{fontSize:12,color:"rgba(240,235,225,0.5)",margin:"2px 0 0"}}>log what you just picked up</p></div></div>
+    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}><BackBtn onClick={()=>{reset("cop");setActiveReupId(null);setView(null);}}/><div><h2 style={{fontSize:20,fontWeight:500,margin:0,color:"#F0EBE1"}}>{isLite?"lite cop":"new cop"}</h2><p style={{fontSize:12,color:"rgba(240,235,225,0.5)",margin:"2px 0 0"}}>{isLite?"no first sesh — goes straight to the stash 🌿":"log what you just picked up"}</p></div></div>
+    {isLite&&liteAdded.length>0&&<GlassCard style={{marginBottom:12,padding:"10px 14px"}}>
+      <p style={{fontSize:11,color:"rgba(240,235,225,0.5)",margin:"0 0 6px"}}>already in re-up #{activeReup?.number||"?"} ✅</p>
+      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{liteAdded.map((n,i)=><span key={i} style={{fontSize:10,background:"rgba(91,138,114,0.25)",color:"#9CC4A8",padding:"2px 8px",borderRadius:8}}>{n}</span>)}</div>
+    </GlassCard>}
     <GlassCard>
       {/* V2: intent at top */}
       <label style={{fontSize:12,fontWeight:500,color:"rgba(240,235,225,0.5)",display:"block",marginBottom:6}}>what's it for?</label>
@@ -428,7 +449,8 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
           </div>}
         <button onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:""})} style={{fontSize:11,padding:"4px 12px",borderRadius:8,background:cop.unknownLineage?"rgba(240,235,225,0.15)":"transparent",color:cop.unknownLineage?"#F0EBE1":"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit",marginBottom:20}}>unknown lineage{cop.unknownLineage?" ✓":""}</button>
       </>}
-      <button onClick={handleSaveCop} style={{width:"100%",padding:14,borderRadius:10,fontSize:15,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit"}}>save cop</button>
+      <button onClick={isLite?handleSaveLiteCop:handleSaveCop} style={{width:"100%",padding:14,borderRadius:10,fontSize:15,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit"}}>{isLite?"add to lite re-up":"save cop"}</button>
+      {isLite&&<button onClick={()=>{reset("cop");setActiveReupId(null);setView(null);}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,marginTop:8,background:"transparent",color:"rgba(240,235,225,0.5)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit"}}>done adding 🤙🏾</button>}
     </GlassCard>
   </Wrapper>);
 
@@ -494,7 +516,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
 
     {/* On hand */}
     {onHand.length>0&&<><StashLabel>on hand</StashLabel>{onHand.map(o=>{const s=strains.find(ss=>ss.id===o.strainId);const intent=s?.intent;return(<SolidCard key={o.copId} style={{marginBottom:8,border:`1px solid rgba(91,138,114,0.3)`}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><TypeBadge type={o.type}/><button onClick={()=>openDetail(s,undefined,"stash")} style={{fontWeight:500,fontSize:15,margin:0,color:"#F0EBE1",background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>{o.strainName}</button><span style={{fontSize:10,background:P.onHand,color:P.cream,padding:"2px 8px",borderRadius:10,fontWeight:500}}>on hand</span>{intent&&<IntentBadge intent={intent}/>}</div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><TypeBadge type={o.type}/><button onClick={()=>openDetail(s,undefined,"stash")} style={{fontWeight:500,fontSize:15,margin:0,color:"#F0EBE1",background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>{o.strainName}</button><span style={{fontSize:10,background:P.onHand,color:P.cream,padding:"2px 8px",borderRadius:10,fontWeight:500}}>on hand</span>{o.lite&&<span style={{fontSize:10,background:"rgba(240,235,225,0.12)",color:"rgba(240,235,225,0.55)",padding:"2px 8px",borderRadius:10}}>lite 🌬️</span>}{intent&&<IntentBadge intent={intent}/>}</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:8}}>{o.terpenes?.map(t=><span key={t} style={{fontSize:10,background:"rgba(107,127,90,0.2)",color:P.sage,padding:"2px 6px",borderRadius:8}}>{t.toLowerCase()}</span>)}</div>
       <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
         {["note","mix"].map(mode=>s&&<button key={mode} onClick={()=>inlineCard?.copId===o.copId&&inlineCard?.mode===mode?closeInline():setInlineCard({copId:o.copId,mode})} style={{flex:1,padding:8,borderRadius:8,fontSize:11,background:inlineCard?.copId===o.copId&&inlineCard?.mode===mode?"rgba(240,235,225,0.14)":"rgba(240,235,225,0.06)",color:inlineCard?.copId===o.copId&&inlineCard?.mode===mode?"#F0EBE1":"rgba(240,235,225,0.5)",border:"0.5px solid rgba(240,235,225,0.1)",cursor:"pointer",fontFamily:"inherit"}}>{mode}</button>)}
@@ -689,7 +711,7 @@ function LibraryPage({strains,legacyStrains,onOpenDetail,onPeek}){
 /* ═══════════════════════════════════════════
    STRAIN DETAIL PAGE
    ═══════════════════════════════════════════ */
-function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
+function StrainDetailPage({strain,copIdx,tab:tabProp,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
   updateNote,setUpdateNote,onSaveNote,mixMode,setMixMode,
   expNote,setExpNote,onSaveExperience,onHand,strains,
   deleteFromCop,editNoteText,editingItem,setEditingItem,editText,setEditText,confirmDeleteItem,
@@ -710,6 +732,11 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
   if(!strain)return null;
   const s=cop?.session;
   const locked=strain.cops.some(c=>c.session?.copAgain==="Never again");
+  // a tab is hidden when it's empty AND there's nothing you could add to it
+  const canAddToCop=!locked&&cop?.status==="on-hand";
+  const tabHasContent=t=>t==="notes"?(cop?.notes||[]).length>0:t==="experiences"?(cop?.experiences||[]).length>0:t==="mixes"?(cop?.mixes||[]).length>0:true;
+  const visibleTabs=["overview","notes","experiences","mixes"].filter(t=>t==="overview"||tabHasContent(t)||canAddToCop);
+  const tab=visibleTabs.includes(tabProp)?tabProp:"overview";
   const allDone=strain.cops.every(c=>c.status==="done");
   const canEditParents=!allDone&&!locked;
   const typeTheme={Indica:{bg:"#130E1C",text:"#D4C8E8",muted:"rgba(212,200,232,0.4)",accent:"#7B6B9E",cardBg:"rgba(212,200,232,0.05)",cardBorder:"rgba(212,200,232,0.08)"},
@@ -752,6 +779,7 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
       {cop?.amount&&<span style={{fontSize:11,padding:"3px 10px",borderRadius:8,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>⚖️ {cop.amount}</span>}
       <span style={{fontSize:11,padding:"3px 10px",borderRadius:8,background:`${typeTheme.accent}20`,color:typeTheme.accent}}>{cop?.type?.toLowerCase()}{cop?.lean?` · ${cop.lean.toLowerCase()}`:""}</span>
       {cop?.status==="on-hand"&&<span style={{fontSize:11,padding:"3px 10px",borderRadius:8,background:"rgba(91,138,114,0.15)",color:"#6B8F5A"}}>on hand</span>}
+      {cop?.lite&&<span style={{fontSize:11,padding:"3px 10px",borderRadius:8,background:`${typeTheme.accent}18`,color:typeTheme.muted}}>lite 🌬️</span>}
     </div>
     {/* Dates line */}
     <p style={{fontSize:11,color:typeTheme.muted,margin:"0 0 14px"}}>{[cop?.date&&`copped ${cop.date}`,s?.date&&`first session ${s.date}`,cop?.finishedDate&&`finished ${cop.finishedDate}`].filter(Boolean).join(" · ")}</p>
@@ -760,19 +788,17 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
     {strain.cops.length>1&&<div style={{display:"flex",gap:6,marginBottom:16,overflowX:"auto"}}>{strain.cops.map((c,i)=><button key={c.id} onClick={()=>{}} style={{padding:"6px 14px",borderRadius:20,fontSize:11,fontFamily:"inherit",cursor:"pointer",whiteSpace:"nowrap",fontWeight:copIdx===i?500:400,background:copIdx===i?typeTheme.accent:"transparent",color:copIdx===i?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:copIdx===i?"none":`0.5px solid ${typeTheme.cardBorder}`}}>cop #{i+1} · {c.date}{c.amount?` · ${c.amount}`:""}</button>)}</div>}
 
     {/* Detail tabs */}
-    <div style={{display:"flex",gap:4,marginBottom:20}}>{["overview","notes","experiences","mixes"].map(t=>{
-      const isFinished=cop?.status==="done";
-      const hasContent=t==="notes"?(cop?.notes||[]).length>0:t==="experiences"?(cop?.experiences||[]).length>0:t==="mixes"?(cop?.mixes||[]).length>0:true;
-      const disabled=isFinished&&t!=="overview"&&!hasContent;
-      return<button key={t} disabled={disabled} onClick={()=>!disabled&&setTab(t)} style={{flex:1,padding:"8px 6px",borderRadius:8,fontSize:11,fontFamily:"inherit",cursor:disabled?"default":"pointer",fontWeight:tab===t?500:400,background:tab===t?typeTheme.accent:"transparent",color:disabled?`${typeTheme.muted}60`:tab===t?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:tab===t?"none":`0.5px solid ${typeTheme.cardBorder}`,opacity:disabled?0.5:1}}>{t}</button>;
-    })}</div>
+    {visibleTabs.length>1&&<div style={{display:"flex",gap:4,marginBottom:20}}>{visibleTabs.map(t=>(
+      <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"8px 6px",borderRadius:8,fontSize:11,fontFamily:"inherit",cursor:"pointer",fontWeight:tab===t?500:400,background:tab===t?typeTheme.accent:"transparent",color:tab===t?(cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4"):typeTheme.muted,border:tab===t?"none":`0.5px solid ${typeTheme.cardBorder}`}}>{t}</button>
+    ))}</div>}
 
     {/* ── OVERVIEW TAB ── */}
-    {tab==="overview"&&s&&<div>
-      {/* Rating */}
+    {tab==="overview"&&<div>
+      {!s&&<p style={{fontSize:11,color:typeTheme.muted,textAlign:"center",margin:"0 0 16px",lineHeight:1.5}}>no first sesh on this one — logged after the fact 🤷🏾 rate it below, notes / experiences / mixes all still work</p>}
+      {/* Rating — stays clickable with no session so lite cops can still be rated */}
       <div style={{textAlign:"center",marginBottom:20}}>
-        <div style={{display:"flex",justifyContent:"center",gap:6}}>{[1,2,3,4,5].map(n=>cop?.status!=="done"?<button key={n} onClick={()=>onUpdateRating(n)} style={{background:"none",border:"none",cursor:"pointer",padding:1}}><Leaf filled={n<=s.rating} size={22} color={locked?"#C15A4A":typeTheme.accent}/></button>:<Leaf key={n} filled={n<=s.rating} size={22} color={locked?"#C15A4A":typeTheme.accent}/>)}</div>
-        <span style={{fontSize:10,color:typeTheme.muted,marginTop:4,display:"block"}}>{s.copAgain?.toLowerCase()}</span>
+        <div style={{display:"flex",justifyContent:"center",gap:6}}>{[1,2,3,4,5].map(n=>cop?.status!=="done"?<button key={n} onClick={()=>onUpdateRating(n)} style={{background:"none",border:"none",cursor:"pointer",padding:1}}><Leaf filled={n<=(s?.rating||0)} size={22} color={locked?"#C15A4A":typeTheme.accent}/></button>:<Leaf key={n} filled={n<=(s?.rating||0)} size={22} color={locked?"#C15A4A":typeTheme.accent}/>)}</div>
+        <span style={{fontSize:10,color:typeTheme.muted,marginTop:4,display:"block"}}>{s?.copAgain?.toLowerCase()||(!s?"tap a leaf to rate 🍃":"")}</span>
       </div>
 
       {/* Terpenes */}
@@ -782,12 +808,12 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
       </div>}
 
       {/* Spectrums */}
-      <div style={{marginBottom:16}}>
+      {s&&<div style={{marginBottom:16}}>
         <p style={{fontSize:10,fontWeight:500,color:typeTheme.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 8px"}}>spectrums</p>
         <SpectrumDisplay left="Couch-locked" right="Active" val={s.spectrums?.sw} color={typeTheme.accent}/>
         <SpectrumDisplay left="Dreamy" right="Analytical" val={s.spectrums?.sf} color={typeTheme.accent}/>
         <SpectrumDisplay left="Smooth" right="Harsh" val={s.pull} color={typeTheme.accent}/>
-      </div>
+      </div>}
 
       {/* Detail grid */}
       <div style={{background:typeTheme.cardBg,borderRadius:12,padding:14,border:`0.5px solid ${typeTheme.cardBorder}`,marginBottom:16}}>
@@ -795,18 +821,18 @@ function StrainDetailPage({strain,copIdx,tab,setTab,onBack,onStar,onUpdateRating
           {cop?.source&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{cop.source==="TL"?"TL":cop.source?.toLowerCase()}{cop.container?` · ${cop.container.toLowerCase()}`:""}</span>}
           {cop?.brand&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{cop.brand}</span>}
           {cop?.growType&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{cop.growType.toLowerCase()}</span>}
-          <span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:s.setting==="outdoor"?"rgba(91,138,114,0.2)":s.bedtime?"rgba(44,44,74,0.5)":typeTheme.cardBg,color:s.setting==="outdoor"?"#6B8F5A":s.bedtime?"#C9B8F0":typeTheme.muted}}>{s.setting==="outdoor"?"outdoor":s.bedtime?"bedtime":"indoor"}</span>
-          {s.smokesLike&&s.smokesLike!==cop?.type&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"rgba(193,127,74,0.15)",color:"#C17F4A"}}>smokes {s.smokesLike.toLowerCase()}</span>}
+          {s&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:s.setting==="outdoor"?"rgba(91,138,114,0.2)":s.bedtime?"rgba(44,44,74,0.5)":typeTheme.cardBg,color:s.setting==="outdoor"?"#6B8F5A":s.bedtime?"#C9B8F0":typeTheme.muted}}>{s.setting==="outdoor"?"outdoor":s.bedtime?"bedtime":"indoor"}</span>}
+          {s?.smokesLike&&s.smokesLike!==cop?.type&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"rgba(193,127,74,0.15)",color:"#C17F4A"}}>smokes {s.smokesLike.toLowerCase()}</span>}
         </div>
         {(()=>{const fi=cop?.firstNotes||(cop?.notes?.length>0?cop.notes[0].text:null)||cop?.session?.notes||null;if(!fi)return null;const fiDate=cop?.firstNotes?cop?.date:cop?.notes?.[0]?.date||cop?.date;return(<div style={{marginTop:8}}><p style={{fontSize:10,color:typeTheme.muted,margin:"0 0 2px"}}>first impressions{fiDate?` · ${fiDate}`:""}</p><p style={{fontSize:12,color:typeTheme.text,margin:0,lineHeight:1.4,opacity:0.8}}>{fi}</p></div>);})()}
       </div>
 
       {/* Vibes + taste */}
-      {(s.vibeTags?.length>0||s.tasteTags?.length>0)&&<div style={{marginBottom:16}}>
+      {(s?.vibeTags?.length>0||s?.tasteTags?.length>0)&&<div style={{marginBottom:16}}>
         <p style={{fontSize:10,fontWeight:500,color:typeTheme.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 8px"}}>vibes</p>
         <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-          {s.tasteTags?.map(t=><span key={t} style={{fontSize:10,padding:"3px 8px",borderRadius:8,background:"rgba(193,127,74,0.15)",color:"#C17F4A"}}>{t.toLowerCase()}</span>)}
-          {s.vibeTags?.map(t=><span key={t} style={{fontSize:10,padding:"3px 8px",borderRadius:8,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{t.toLowerCase()}</span>)}
+          {s?.tasteTags?.map(t=><span key={t} style={{fontSize:10,padding:"3px 8px",borderRadius:8,background:"rgba(193,127,74,0.15)",color:"#C17F4A"}}>{t.toLowerCase()}</span>)}
+          {s?.vibeTags?.map(t=><span key={t} style={{fontSize:10,padding:"3px 8px",borderRadius:8,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{t.toLowerCase()}</span>)}
         </div>
       </div>}
 
@@ -954,9 +980,12 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
   // ── All data aggregation ──
   const allCops=strains.flatMap(s=>s.cops.filter(c=>c.session).map(c=>({...c,strainName:s.name,strainId:s.id,intent:s.intent,starred:s.starred})));
   const totalSessions=allCops.length;
-  const avgRating=totalSessions>0?(allCops.reduce((s,c)=>s+(c.session?.rating||0),0)/totalSessions).toFixed(1):"—";
-  const copAgainYes=allCops.filter(c=>c.session?.copAgain==="Yes").length;
-  const copAgainPct=totalSessions>0?Math.round(copAgainYes/totalSessions*100):0;
+  // rated/voted subsets — a cop with no rating must not be averaged in as a zero
+  const ratedCops=allCops.filter(c=>(c.session?.rating||0)>0);
+  const votedCops=allCops.filter(c=>c.session?.copAgain);
+  const avgRating=ratedCops.length>0?(ratedCops.reduce((s,c)=>s+(c.session?.rating||0),0)/ratedCops.length).toFixed(1):"—";
+  const copAgainYes=votedCops.filter(c=>c.session?.copAgain==="Yes").length;
+  const copAgainPct=votedCops.length>0?Math.round(copAgainYes/votedCops.length*100):0;
 
   const allMixes=strains.flatMap(s=>s.cops.flatMap(c=>(c.mixes||[]).filter(m=>m.status==="reviewed").map(m=>({...m,strainName:s.name}))));
   const uniqueMixes=[];const seenShared=new Set();
@@ -964,7 +993,7 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
 
   // Terpenes
   const terpCounts={};const terpRatings={};const terpCopAgain={};
-  allCops.forEach(c=>{(c.terpenes||[]).forEach(t=>{terpCounts[t]=(terpCounts[t]||0)+1;if(!terpRatings[t])terpRatings[t]=[];terpRatings[t].push(c.session?.rating||0);if(!terpCopAgain[t])terpCopAgain[t]={yes:0,total:0};terpCopAgain[t].total++;if(c.session?.copAgain==="Yes")terpCopAgain[t].yes++;});});
+  allCops.forEach(c=>{(c.terpenes||[]).forEach(t=>{terpCounts[t]=(terpCounts[t]||0)+1;if(!terpRatings[t])terpRatings[t]=[];if((c.session?.rating||0)>0)terpRatings[t].push(c.session.rating);if(!terpCopAgain[t])terpCopAgain[t]={yes:0,total:0};terpCopAgain[t].total++;if(c.session?.copAgain==="Yes")terpCopAgain[t].yes++;});});
   const terpEntries=Object.entries(terpCounts).sort((a,b)=>b[1]-a[1]);
   const maxTerpCount=terpEntries.length>0?terpEntries[0][1]:1;
   const topTerp=terpEntries[0];
@@ -976,7 +1005,7 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
 
   // Types
   const typeCounts={Indica:0,Sativa:0,Hybrid:0};const typeRatings={Indica:[],Sativa:[],Hybrid:[]};
-  allCops.forEach(c=>{const t=c.type;if(typeCounts[t]!==undefined){typeCounts[t]++;typeRatings[t].push(c.session?.rating||0);}});
+  allCops.forEach(c=>{const t=c.type;if(typeCounts[t]!==undefined){typeCounts[t]++;if((c.session?.rating||0)>0)typeRatings[t].push(c.session.rating);}});
   const typeAvgs={};Object.entries(typeRatings).forEach(([t,r])=>{typeAvgs[t]=r.length>0?(r.reduce((a,b)=>a+b,0)/r.length).toFixed(1):"—";});
   const allFiveStars=allCops.filter(c=>(c.session?.rating||0)>=5);
   const fiveStarTypes=[...new Set(allFiveStars.map(c=>c.type))];
@@ -988,13 +1017,14 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
 
   // Brands
   const tlCops=allCops.filter(c=>c.source==="TL");const dispCops=allCops.filter(c=>c.source==="Dispensary");
-  const tlAvg=tlCops.length>0?(tlCops.reduce((s,c)=>s+(c.session?.rating||0),0)/tlCops.length).toFixed(1):"—";
-  const dispAvg=dispCops.length>0?(dispCops.reduce((s,c)=>s+(c.session?.rating||0),0)/dispCops.length).toFixed(1):"—";
+  const tlRated=tlCops.filter(c=>(c.session?.rating||0)>0);const dispRated=dispCops.filter(c=>(c.session?.rating||0)>0);
+  const tlAvg=tlRated.length>0?(tlRated.reduce((s,c)=>s+c.session.rating,0)/tlRated.length).toFixed(1):"—";
+  const dispAvg=dispRated.length>0?(dispRated.reduce((s,c)=>s+c.session.rating,0)/dispRated.length).toFixed(1):"—";
   const brandCounts={};const brandRatings={};
-  dispCops.filter(c=>c.brand).forEach(c=>{const b=c.brand;brandCounts[b]=(brandCounts[b]||0)+1;if(!brandRatings[b])brandRatings[b]=[];brandRatings[b].push(c.session?.rating||0);});
+  dispCops.filter(c=>c.brand).forEach(c=>{const b=c.brand;brandCounts[b]=(brandCounts[b]||0)+1;if(!brandRatings[b])brandRatings[b]=[];if((c.session?.rating||0)>0)brandRatings[b].push(c.session.rating);});
   const brandEntries=Object.entries(brandCounts).sort((a,b)=>b[1]-a[1]);
   const growCounts={};const growRatings={};const growCopAgain={};
-  dispCops.filter(c=>c.growType).forEach(c=>{const g=c.growType;growCounts[g]=(growCounts[g]||0)+1;if(!growRatings[g])growRatings[g]=[];growRatings[g].push(c.session?.rating||0);if(!growCopAgain[g])growCopAgain[g]={yes:0,maybe:0,no:0};if(c.session?.copAgain==="Yes")growCopAgain[g].yes++;else if(c.session?.copAgain==="Maybe")growCopAgain[g].maybe++;else growCopAgain[g].no++;});
+  dispCops.filter(c=>c.growType).forEach(c=>{const g=c.growType;growCounts[g]=(growCounts[g]||0)+1;if(!growRatings[g])growRatings[g]=[];if((c.session?.rating||0)>0)growRatings[g].push(c.session.rating);if(!growCopAgain[g])growCopAgain[g]={yes:0,maybe:0,no:0};if(c.session?.copAgain==="Yes")growCopAgain[g].yes++;else if(c.session?.copAgain==="Maybe")growCopAgain[g].maybe++;else growCopAgain[g].no++;});
   const growEntries=Object.entries(growCounts).sort((a,b)=>{const avgA=growRatings[a[0]].reduce((x,y)=>x+y,0)/a[1];const avgB=growRatings[b[0]].reduce((x,y)=>x+y,0)/b[1];return avgB-avgA;});
 
   // Outdoor
@@ -1027,7 +1057,7 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
 
   // Intent
   const intentCounts={asleep:0,awake:0,adventure:0};const intentRatings={asleep:[],awake:[],adventure:[]};
-  allCops.forEach(c=>{const i=c.intent;if(i&&intentCounts[i]!==undefined){intentCounts[i]++;intentRatings[i].push(c.session?.rating||0);}});
+  allCops.forEach(c=>{const i=c.intent;if(i&&intentCounts[i]!==undefined){intentCounts[i]++;if((c.session?.rating||0)>0)intentRatings[i].push(c.session.rating);}});
   const intentAvgs={};Object.entries(intentRatings).forEach(([k,r])=>{intentAvgs[k]=r.length>0?(r.reduce((a,b)=>a+b,0)/r.length).toFixed(1):"—";});
   const intentTerpsMap={};["asleep","awake","adventure"].forEach(k=>{const cops=allCops.filter(c=>c.intent===k);const t={};cops.forEach(c=>(c.terpenes||[]).forEach(terp=>{t[terp]=(t[terp]||0)+1;}));intentTerpsMap[k]=Object.entries(t).sort((a,b)=>b[1]-a[1]).slice(0,3);});
 
@@ -1742,7 +1772,7 @@ function RecommenderPage({strains,reups,savedTips,onSaveTip,onDeleteTip,onPeek})
 
   // Terpene affinity
   const terpRatings={};
-  filtered.forEach(c=>(c.terpenes||[]).forEach(t=>{if(!terpRatings[t])terpRatings[t]=[];terpRatings[t].push(c.session?.rating||0);}));
+  filtered.forEach(c=>(c.terpenes||[]).forEach(t=>{if(!terpRatings[t])terpRatings[t]=[];if((c.session?.rating||0)>0)terpRatings[t].push(c.session.rating);}));
   const topTerps=Object.entries(terpRatings).map(([t,ratings])=>({name:t,avg:(ratings.reduce((a,b)=>a+b,0)/ratings.length),count:ratings.length})).sort((a,b)=>b.avg-a.avg).slice(0,8);
 
   // Winning pairs
@@ -1967,7 +1997,8 @@ function PeekSheet({strain,strains,onClose,onOpenDetail,pageBg}){
   const s=strains.find(x=>x.id===strain.id)||strain;
   const lc=s.cops[s.cops.length-1];
   const allSessions=s.cops.filter(c=>c.session);
-  const avgRating=allSessions.length>0?(allSessions.reduce((a,c)=>a+(c.session?.rating||0),0)/allSessions.length):0;
+  const ratedSessions=allSessions.filter(c=>(c.session?.rating||0)>0);
+  const avgRating=ratedSessions.length>0?(ratedSessions.reduce((a,c)=>a+c.session.rating,0)/ratedSessions.length):0;
   const topVibes={};allSessions.forEach(c=>(c.session?.vibeTags||[]).forEach(v=>{topVibes[v]=(topVibes[v]||0)+1;}));
   const vibes=Object.entries(topVibes).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([v])=>v);
   const lastCop=allSessions[allSessions.length-1];
@@ -2108,7 +2139,7 @@ const FIELD_BOX={background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255
 /* ═══════════════════════════════════════════
    DESKTOP — Home page
    ═══════════════════════════════════════════ */
-function DesktopHomePage({strains,legacyStrains,onHand,coppedEntries,setCoppedEntries,reups,setReups,finishedReups,savedComparisons,savedTips,onNavigate}){
+function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,reups,setReups,finishedReups,savedComparisons,savedTips,onNavigate}){
   const hasSaved=savedComparisons.length>0||savedTips.length>0;
   const openReups=reups||[];
 
@@ -2119,14 +2150,17 @@ function DesktopHomePage({strains,legacyStrains,onHand,coppedEntries,setCoppedEn
 
   const resetCop=()=>setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:""});
 
-  const handleAddReup=()=>{
+  const handleAddReup=(lite=false)=>{
     if(openReups.length>=2)return;
     const newId="r"+Date.now();
     const allAssignedNumbers=[...finishedReups,...openReups].map(x=>x.number||0);
     const nextNum=allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1;
-    setReups([...openReups,{id:newId,date:today(),closed:false,copIds:[],coppedIds:[],number:nextNum}]);
+    setReups([...openReups,{id:newId,date:today(),closed:false,copIds:[],coppedIds:[],number:nextNum,...(lite?{lite:true}:{})}]);
     setActiveReupId(newId);
   };
+
+  const activeReup=openReups.find(r=>r.id===activeReupId);
+  const isLite=!!activeReup?.lite;
 
   const handleSaveCop=()=>{
     if(!cop.name.trim())return;
@@ -2135,6 +2169,17 @@ function DesktopHomePage({strains,legacyStrains,onHand,coppedEntries,setCoppedEn
     if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
     resetCop();
     setFormOpen(false);
+  };
+
+  // Lite cop — straight to on-hand, no first session. Mirrors mobile's handleSaveLiteCop.
+  const handleSaveLiteCop=()=>{
+    if(!cop.name.trim())return;
+    const{copId,strainId,newCop,onHandEntry}=makeLiteCop(cop,activeReupId);
+    if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:s.intent||cop.intent||null,cops:[...s.cops,newCop]}));
+    }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
+    if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,copIds:[...(r.copIds||[]),copId]}));
+    setOnHand([onHandEntry,...onHand]);
+    resetCop();
   };
 
   return(
@@ -2181,17 +2226,20 @@ function DesktopHomePage({strains,legacyStrains,onHand,coppedEntries,setCoppedEn
             <div style={{display:"flex",gap:8,margin:"16px 0"}}>
               {openReups.map(r=>(
                 <div key={r.id} onClick={()=>setActiveReupId(r.id)} style={{cursor:"pointer"}}>
-                  <RetroWindow title={"RE-UP #"+r.number} badge={activeReupId===r.id?"SELECTED":null}>
+                  <RetroWindow title={"RE-UP #"+r.number+(r.lite?" · LITE":"")} badge={activeReupId===r.id?"SELECTED":null}>
                     <div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.3)"}}>{(r.coppedIds?.length||0)+(r.copIds?.length||0)} STRAIN(S)</div>
                   </RetroWindow>
                 </div>
               ))}
-              {openReups.length<2&&<div onClick={handleAddReup} style={{padding:"10px 16px",border:"2px dashed rgba(232,200,154,0.12)",display:"flex",alignItems:"center",cursor:"pointer"}}>
+              {openReups.length<2&&<><div onClick={()=>handleAddReup(false)} style={{padding:"10px 16px",border:"2px dashed rgba(232,200,154,0.12)",display:"flex",alignItems:"center",cursor:"pointer"}}>
                 <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.2)"}}>+ NEW</span>
-              </div>}
+              </div>
+              <div onClick={()=>handleAddReup(true)} title="skips the first sesh — for what you're already smoking" style={{padding:"10px 16px",border:"2px dashed rgba(232,200,154,0.12)",display:"flex",alignItems:"center",cursor:"pointer"}}>
+                <span style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:"rgba(232,200,154,0.2)"}}>+ NEW LITE</span>
+              </div></>}
             </div>
 
-            <RetroWindow title="LOG A NEW COP" badge={activeReupId?"→ SELECTED RE-UP":null} onClose={()=>setFormOpen(false)}>
+            <RetroWindow title={isLite?"LOG A LITE COP":"LOG A NEW COP"} badge={isLite?"→ NO FIRST SESH 🌿":activeReupId?"→ SELECTED RE-UP":null} onClose={()=>setFormOpen(false)}>
               <div style={{display:"flex",gap:20}}>
                 <div style={{flex:1}}>
                   <RetroHeader>intent</RetroHeader>
@@ -2271,7 +2319,7 @@ function DesktopHomePage({strains,legacyStrains,onHand,coppedEntries,setCoppedEn
                 </div>
               )}
               <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-                <button onClick={handleSaveCop} disabled={!cop.name.trim()} style={{padding:"10px 24px",background:cop.name.trim()?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:cop.name.trim()?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"inherit",cursor:cop.name.trim()?"pointer":"default"}}>save cop</button>
+                <button onClick={isLite?handleSaveLiteCop:handleSaveCop} disabled={!cop.name.trim()} style={{padding:"10px 24px",background:cop.name.trim()?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:cop.name.trim()?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"inherit",cursor:cop.name.trim()?"pointer":"default"}}>{isLite?"add to lite re-up":"save cop"}</button>
               </div>
             </RetroWindow>
           </>
@@ -2354,7 +2402,7 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
             const type=oh.type||strain.type;
             return(
               <StrainCard key={oh.copId||oh.strainId} name={strain.name} type={type}
-                meta={`${(type||"unknown").toUpperCase()}${days!==null?` · day ${days}`:""}`}
+                meta={`${(type||"unknown").toUpperCase()}${days!==null?` · day ${days}`:""}${oh.lite?" · LITE 🌬️":""}`}
                 onClick={()=>onSelectStrain(strain)}
               />
             );
@@ -2388,7 +2436,7 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
 /* ═══════════════════════════════════════════
    STRAIN DETAIL WINDOW (Desktop)
    ═══════════════════════════════════════════ */
-function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strains,onHand,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
+function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab,onClose,strains,onHand,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
   if(!selectedStrain)return null;
 
   const liveStrain=strains.find(s=>s.id===selectedStrain.id)||null;
@@ -2397,6 +2445,10 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
   const cop=strain.cops?.[0];
   const session=cop?.session;
   const canEdit=isReal&&cop?.status==="on-hand";
+  // same rule as mobile — hide a tab that's empty and can't be added to
+  const tabHasContent=t=>t==="notes"?(cop?.notes||[]).length>0:t==="experiences"?(cop?.experiences||[]).length>0:t==="mixes"?(cop?.mixes||[]).length>0:true;
+  const visibleTabs=["overview","notes","experiences","mixes"].filter(t=>t==="overview"||tabHasContent(t)||canEdit);
+  const detailTab=visibleTabs.includes(detailTabProp)?detailTabProp:"overview";
 
   const[addingNote,setAddingNote]=useState(false);
   const[noteDraft,setNoteDraft]=useState("");
@@ -2451,7 +2503,7 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:150,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px",overflowY:"auto",pointerEvents:"auto"}}>
-      <div style={{width:"100%",maxWidth:420,borderRadius:0,border:`2.5px solid ${theme.border}`,background:"rgba(18,13,6,0.92)",boxShadow:"6px 6px 0 rgba(0,0,0,0.5)",overflow:"hidden",marginTop:"20px"}}>
+      <div style={{position:"relative",zIndex:2,width:"100%",maxWidth:420,borderRadius:0,border:`2.5px solid ${theme.border}`,background:"rgba(18,13,6,0.92)",boxShadow:"6px 6px 0 rgba(0,0,0,0.5)",overflow:"hidden",marginTop:"20px"}}>
         {/* Title bar */}
         <div style={{background:theme.gradient,borderBottom:`2px solid ${theme.border}`,padding:"7px 12px",display:"flex",alignItems:"center",gap:8}}>
           <div style={{display:"flex",gap:4}}>
@@ -2472,7 +2524,7 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
 
           {/* Tabs */}
           <div style={{display:"flex",gap:3,marginBottom:12}}>
-            {["overview","notes","experiences","mixes"].map(t=>(
+            {visibleTabs.map(t=>(
               <button key={t} onClick={()=>setDetailTab(t)} style={{flex:1,padding:"5px 12px",borderRadius:16,fontSize:11,fontFamily:"inherit",cursor:"pointer",background:detailTab===t?`${theme.accent}30`:"transparent",color:detailTab===t?theme.text:theme.dimText,border:detailTab===t?`0.5px solid ${theme.accent}60`:`0.5px solid ${theme.accent}20`,fontWeight:detailTab===t?500:400}}>{t}</button>
             ))}
           </div>
@@ -2490,26 +2542,11 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
               <div style={{marginBottom:8}}>
                 <div style={{fontSize:8,fontWeight:500,color:theme.dimText,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 8px",borderLeft:`2px solid ${theme.accent}`,background:`linear-gradient(90deg,${theme.accent}30,transparent)`,padding:"4px 8px"}}>SPECTRUMS</div>
                 {session?.spectrums?(<>
-                  <div style={{marginBottom:8}}>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>couch</span><span>active</span></div>
-                    <div style={{height:3,position:"relative",borderRadius:2,background:`${theme.accent}20`,border:`0.5px solid ${theme.accent}40`}}>
-                      <div style={{position:"absolute",top:-4,left:`${((session.spectrums.sw||0)+3)/6*100}%`,width:10,height:10,borderRadius:"50%",background:"#fff",border:`2px solid ${theme.accent}`,boxShadow:`0 0 6px ${theme.accent}, 0 0 10px ${theme.accent}80, 0 1px 3px rgba(0,0,0,0.8)`,transform:"translateX(-50%)"}}/>
-                    </div>
-                  </div>
-                  <div style={{marginBottom:8}}>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>dreamy</span><span>analytical</span></div>
-                    <div style={{height:3,position:"relative",borderRadius:2,background:`${theme.accent}20`,border:`0.5px solid ${theme.accent}40`}}>
-                      <div style={{position:"absolute",top:-4,left:`${((session.spectrums.sf||0)+3)/6*100}%`,width:10,height:10,borderRadius:"50%",background:"#fff",border:`2px solid ${theme.accent}`,boxShadow:`0 0 6px ${theme.accent}, 0 0 10px ${theme.accent}80, 0 1px 3px rgba(0,0,0,0.8)`,transform:"translateX(-50%)"}}/>
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,marginBottom:5,color:theme.dimText}}><span>smooth</span><span>harsh</span></div>
-                    <div style={{height:3,position:"relative",borderRadius:2,background:`${theme.accent}20`,border:`0.5px solid ${theme.accent}40`}}>
-                      <div style={{position:"absolute",top:-4,left:`${((session.pull||0)+3)/6*100}%`,width:10,height:10,borderRadius:"50%",background:"#fff",border:`2px solid ${theme.accent}`,boxShadow:`0 0 6px ${theme.accent}, 0 0 10px ${theme.accent}80, 0 1px 3px rgba(0,0,0,0.8)`,transform:"translateX(-50%)"}}/>
-                    </div>
-                  </div>
+                  <DarkSpectrumDisplay left="couch" right="active" val={session.spectrums.sw} theme={theme}/>
+                  <DarkSpectrumDisplay left="dreamy" right="analytical" val={session.spectrums.sf} theme={theme}/>
+                  <DarkSpectrumDisplay left="smooth" right="harsh" val={session.pull} theme={theme}/>
                 </>):(
-                  <p style={{fontSize:10,color:theme.dimText,fontStyle:"italic"}}>no session review yet</p>
+                  <p style={{fontSize:10,color:theme.dimText}}>{cop?.lite?"no spectrums — this one skipped the first sesh 🤷🏾":"no session review yet"}</p>
                 )}
               </div>
 
@@ -2693,7 +2730,7 @@ function StrainDetailWindow({selectedStrain,detailTab,setDetailTab,onClose,strai
           )}
         </div>
       </div>
-      <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:140}}/>
+      <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:1}}/>
     </div>
   );
 }
@@ -2990,7 +3027,7 @@ function DesktopRecommenderPage({strains,savedTips,onSaveTip,onDeleteTip,onSelec
   const highRated=filtered.filter(c=>(c.session?.rating||0)>=4);
 
   const terpRatings={};
-  filtered.forEach(c=>(c.terpenes||[]).forEach(t=>{if(!terpRatings[t])terpRatings[t]=[];terpRatings[t].push(c.session?.rating||0);}));
+  filtered.forEach(c=>(c.terpenes||[]).forEach(t=>{if(!terpRatings[t])terpRatings[t]=[];if((c.session?.rating||0)>0)terpRatings[t].push(c.session.rating);}));
   const topTerps=Object.entries(terpRatings).map(([t,ratings])=>({name:t,avg:(ratings.reduce((a,b)=>a+b,0)/ratings.length),count:ratings.length})).sort((a,b)=>b.avg-a.avg).slice(0,8);
 
   const combos={};
@@ -3053,7 +3090,8 @@ function DesktopRecommenderPage({strains,savedTips,onSaveTip,onDeleteTip,onSelec
   matchingCops.forEach(c=>{if(c.type&&typeCounts[c.type]!==undefined)typeCounts[c.type]++;});
   const typeEntries=Object.entries(typeCounts).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
   const hasSearchData=matchingCops.length>0;
-  const matchingAvgRating=matchingCops.length>0?(matchingCops.reduce((s,c)=>s+(c.session?.rating||0),0)/matchingCops.length).toFixed(1):"—";
+  const matchingRated=matchingCops.filter(c=>(c.session?.rating||0)>0);
+  const matchingAvgRating=matchingRated.length>0?(matchingRated.reduce((s,c)=>s+c.session.rating,0)/matchingRated.length).toFixed(1):"—";
   const atMax=selectedTerps.length>=3;
   const trioNudge=selectedTerps.length===2?(()=>{
     const[t1,t2]=selectedTerps;
@@ -3065,9 +3103,9 @@ function DesktopRecommenderPage({strains,savedTips,onSaveTip,onDeleteTip,onSelec
   })():null;
   const strainMap=matchingCops.reduce((acc,c)=>{
     if(!acc[c.strainId])acc[c.strainId]={name:c.strainName,type:c.type,count:0,strainId:c.strainId,ratingSum:0};
-    acc[c.strainId].count++;acc[c.strainId].ratingSum+=c.session?.rating||0;return acc;
+    acc[c.strainId].count++;if((c.session?.rating||0)>0){acc[c.strainId].ratingSum+=c.session.rating;acc[c.strainId].ratedCount=(acc[c.strainId].ratedCount||0)+1;}return acc;
   },{});
-  const matchingStrains=Object.values(strainMap).map(s=>({...s,avgRating:s.count>0?s.ratingSum/s.count:0}));
+  const matchingStrains=Object.values(strainMap).map(s=>({...s,avgRating:(s.ratedCount||0)>0?s.ratingSum/s.ratedCount:0}));
   const intentEntries=Object.entries(intentCounts).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
   const topIntent=intentEntries[0];
   const topIntentPct=topIntent&&total>0?Math.round(topIntent[1]/total*100):0;
@@ -3547,7 +3585,7 @@ function DesktopShell(){
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <DesktopTopBar page={page}/>
           {page==="home"
-            ?<DesktopHomePage strains={strains} legacyStrains={legacyStrains} onHand={onHand} coppedEntries={coppedEntries} setCoppedEntries={setCoppedEntries} reups={reups} setReups={setReups} finishedReups={finishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
+            ?<DesktopHomePage strains={strains} setStrains={setStrains} legacyStrains={legacyStrains} onHand={onHand} setOnHand={setOnHand} coppedEntries={coppedEntries} setCoppedEntries={setCoppedEntries} reups={reups} setReups={setReups} finishedReups={finishedReups} savedComparisons={savedComparisons} savedTips={savedTips} onNavigate={navigate}/>
             :page==="library"
             ?<DesktopLibraryPage strains={strains} legacyStrains={legacyStrains} onSelectStrain={handleSelectStrain}/>
             :page==="insights"
@@ -3685,6 +3723,18 @@ function MobileShell(){
     reset("cop");setActiveReupId(null);setView(null);
   };
 
+  // Lite cop: straight to on-hand, no first session. session stays null and lite:true
+  // keeps it out of every analytics surface (they all filter c.session).
+  const handleSaveLiteCop=()=>{
+    if(!cop.name.trim())return;
+    const{copId,strainId,newCop,onHandEntry}=makeLiteCop(cop,activeReupId);
+    if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:s.intent||cop.intent||null,cops:[...s.cops,newCop]}));
+    }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
+    if(activeReupId)setReups(reups.map(r=>r.id!==activeReupId?r:{...r,copIds:[...(r.copIds||[]),copId]}));
+    setOnHand([onHandEntry,...onHand]);
+    reset("cop");
+  };
+
   const handleSaveSession=()=>{
     if(!editEntry)return;
     const copId=Date.now();const strainId=editEntry.strainId||copId+1;
@@ -3704,7 +3754,7 @@ function MobileShell(){
   const handleConfirmDone=()=>{
     if(!finishingCop)return;const fc=finishingCop;
     const newOnHand=onHand.filter(o=>o.copId!==fc.copId);
-    const newStrains=strains.map(s=>s.id!==fc.strainId?s:{...s,cops:s.cops.map(c=>c.id!==fc.copId?c:{...c,status:"done",finishedDate:today(),session:{...c.session,copAgain:finishCopAgain||c.session.copAgain}})});
+    const newStrains=strains.map(s=>s.id!==fc.strainId?s:{...s,cops:s.cops.map(c=>c.id!==fc.copId?c:{...c,status:"done",finishedDate:today(),session:{...c.session,copAgain:finishCopAgain||c.session?.copAgain}})});
     setOnHand(newOnHand);setStrains(newStrains);
     const reupForCop=reups.find(r=>r.copIds.includes(fc.copId));
     if(reupForCop){const allDone=reupForCop.copIds.every(cId=>{const c=newStrains.flatMap(s=>s.cops).find(cc=>cc.id===cId);return c?.status==="done";});
@@ -3833,7 +3883,7 @@ function MobileShell(){
   const renderPage=()=>{
     switch(page){
       case "home": return <HomePage strains={strains} onHand={onHand} coppedEntries={coppedEntries} mixQueue={mixQueue} finishedReups={finishedReups} onNavigate={navigate} onLogCop={()=>{setPage("stash");setMenuOpen(false);setView("reupPicker");window.scrollTo(0,0);}} onOpenDetail={openDetail} savedComparisons={savedComparisons} savedTips={savedTips}/>;
-      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
+      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveLiteCop={handleSaveLiteCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
       case "library": return <LibraryPage strains={strains} legacyStrains={legacyStrains} onOpenDetail={openDetail} onPeek={s=>setPeekStrain(s)}/>;
       case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
       case "insights": return <InsightsPage strains={strains} onHand={onHand} onPeek={s=>setPeekStrain(s)} dismissed={insightsDismissed} setDismissed={setInsightsDismissed} saved={insightsSaved} setSaved={setInsightsSaved}/>;
