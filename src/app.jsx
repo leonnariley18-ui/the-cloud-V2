@@ -798,6 +798,13 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
   },[cop?.id,cop?.status,tabProp]);
   if(!strain)return null;
   const s=cop?.session;
+  // gate on field presence, not on session existing — a rated lite cop has a
+  // session with nothing in it but the rating. 0 is a real spectrum value, so
+  // test against null rather than falsiness.
+  const swVal=s?.spectrums?.sw,sfVal=s?.spectrums?.sf,pullVal=s?.pull;
+  const hasSpectrums=[swVal,sfVal,pullVal].some(v=>v!=null);
+  const hasSetting=s?.setting!=null||s?.bedtime!=null;
+  const hasFirstSesh=!!s&&(hasSpectrums||hasSetting||!!s.smokesLike||(s.tasteTags||[]).length>0||(s.vibeTags||[]).length>0||!!s.notes);
   const locked=strain.cops.some(c=>c.session?.copAgain==="Never again");
   // a tab is hidden when it's empty AND there's nothing you could add to it
   const canAddToCop=!locked&&cop?.status==="on-hand";
@@ -861,7 +868,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
 
     {/* ── OVERVIEW TAB ── */}
     {tab==="overview"&&<div>
-      {!s&&<p style={{fontSize:11,color:typeTheme.muted,textAlign:"center",margin:"0 0 16px",lineHeight:1.5}}>no first sesh on this one — logged after the fact 🤷🏾 rate it below, notes / experiences / mixes all still work</p>}
+      {!hasFirstSesh&&<p style={{fontSize:11,color:typeTheme.muted,textAlign:"center",margin:"0 0 16px",lineHeight:1.5}}>no first sesh on this one — logged after the fact 🤷🏾 {(s?.rating||0)>0?"":"rate it below, "}notes / experiences / mixes all still work</p>}
       {/* Rating — stays clickable with no session so lite cops can still be rated */}
       <div style={{textAlign:"center",marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"center",gap:6}}>{[1,2,3,4,5].map(n=>cop?.status!=="done"?<button key={n} onClick={()=>onUpdateRating(n)} style={{background:"none",border:"none",cursor:"pointer",padding:1}}><Leaf filled={n<=(s?.rating||0)} size={22} color={locked?"#C15A4A":typeTheme.accent}/></button>:<Leaf key={n} filled={n<=(s?.rating||0)} size={22} color={locked?"#C15A4A":typeTheme.accent}/>)}</div>
@@ -875,11 +882,11 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
       </div>}
 
       {/* Spectrums */}
-      {s&&<div style={{marginBottom:16}}>
+      {hasSpectrums&&<div style={{marginBottom:16}}>
         <p style={{fontSize:10,fontWeight:500,color:typeTheme.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 8px"}}>spectrums</p>
-        <SpectrumDisplay left="Couch-locked" right="Active" val={s.spectrums?.sw} color={typeTheme.accent}/>
-        <SpectrumDisplay left="Dreamy" right="Analytical" val={s.spectrums?.sf} color={typeTheme.accent}/>
-        <SpectrumDisplay left="Smooth" right="Harsh" val={s.pull} color={typeTheme.accent}/>
+        {swVal!=null&&<SpectrumDisplay left="Couch-locked" right="Active" val={swVal} color={typeTheme.accent}/>}
+        {sfVal!=null&&<SpectrumDisplay left="Dreamy" right="Analytical" val={sfVal} color={typeTheme.accent}/>}
+        {pullVal!=null&&<SpectrumDisplay left="Smooth" right="Harsh" val={pullVal} color={typeTheme.accent}/>}
       </div>}
 
       {/* Detail grid */}
@@ -888,7 +895,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
           {cop?.source&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{cop.source==="TL"?"TL":cop.source?.toLowerCase()}{cop.container?` · ${cop.container.toLowerCase()}`:""}</span>}
           {cop?.brand&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{cop.brand}</span>}
           {cop?.growType&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:typeTheme.cardBg,color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`}}>{cop.growType.toLowerCase()}</span>}
-          {s&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:s.setting==="outdoor"?"rgba(91,138,114,0.2)":s.bedtime?"rgba(44,44,74,0.5)":typeTheme.cardBg,color:s.setting==="outdoor"?"#6B8F5A":s.bedtime?"#C9B8F0":typeTheme.muted}}>{s.setting==="outdoor"?"outdoor":s.bedtime?"bedtime":"indoor"}</span>}
+          {hasSetting&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:s.setting==="outdoor"?"rgba(91,138,114,0.2)":s.bedtime?"rgba(44,44,74,0.5)":typeTheme.cardBg,color:s.setting==="outdoor"?"#6B8F5A":s.bedtime?"#C9B8F0":typeTheme.muted}}>{s.setting==="outdoor"?"outdoor":s.bedtime?"bedtime":"indoor"}</span>}
           {s?.smokesLike&&s.smokesLike!==cop?.type&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"rgba(193,127,74,0.15)",color:"#C17F4A"}}>smokes {s.smokesLike.toLowerCase()}</span>}
         </div>
         {(()=>{const fi=cop?.firstNotes||(cop?.notes?.length>0?cop.notes[0].text:null)||cop?.session?.notes||null;if(!fi)return null;const fiDate=cop?.firstNotes?cop?.date:cop?.notes?.[0]?.date||cop?.date;return(<div style={{marginTop:8}}><p style={{fontSize:10,color:typeTheme.muted,margin:"0 0 2px"}}>first impressions{fiDate?` · ${fiDate}`:""}</p><p style={{fontSize:12,color:typeTheme.text,margin:0,lineHeight:1.4,opacity:0.8}}>{fi}</p></div>);})()}
@@ -2542,6 +2549,9 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
   const cop=cops[Math.min(copIdx,cops.length-1)];
   const session=cop?.session;
   const canEdit=isReal&&cop?.status==="on-hand";
+  // gate on field presence, not on session existing (0 is a real spectrum value)
+  const swVal=session?.spectrums?.sw,sfVal=session?.spectrums?.sf,pullVal=session?.pull;
+  const hasSpectrums=[swVal,sfVal,pullVal].some(v=>v!=null);
   // same rule as mobile — hide a tab that's empty and can't be added to
   const tabHasContent=t=>t==="notes"?(cop?.notes||[]).length>0:t==="experiences"?(cop?.experiences||[]).length>0:t==="mixes"?(cop?.mixes||[]).length>0:true;
   const visibleTabs=["overview","notes","experiences","mixes"].filter(t=>t==="overview"||tabHasContent(t)||canEdit);
@@ -2645,10 +2655,10 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
               {/* Spectrums */}
               <div style={{marginBottom:8}}>
                 <div style={{fontSize:8,fontWeight:500,color:theme.dimText,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 8px",borderLeft:`2px solid ${theme.accent}`,background:`linear-gradient(90deg,${theme.accent}30,transparent)`,padding:"4px 8px"}}>SPECTRUMS</div>
-                {session?.spectrums?(<>
-                  <DarkSpectrumDisplay left="couch" right="active" val={session.spectrums.sw} theme={theme}/>
-                  <DarkSpectrumDisplay left="dreamy" right="analytical" val={session.spectrums.sf} theme={theme}/>
-                  <DarkSpectrumDisplay left="smooth" right="harsh" val={session.pull} theme={theme}/>
+                {hasSpectrums?(<>
+                  {swVal!=null&&<DarkSpectrumDisplay left="couch" right="active" val={swVal} theme={theme}/>}
+                  {sfVal!=null&&<DarkSpectrumDisplay left="dreamy" right="analytical" val={sfVal} theme={theme}/>}
+                  {pullVal!=null&&<DarkSpectrumDisplay left="smooth" right="harsh" val={pullVal} theme={theme}/>}
                 </>):(
                   <p style={{fontSize:10,color:theme.dimText}}>{cop?.lite?"no spectrums — this one skipped the first sesh 🤷🏾":"no session review yet"}</p>
                 )}
