@@ -41,6 +41,18 @@ const inferIso=dateStr=>{
   return thisYear;
 };
 const stamp=()=>({date:today(),dateIso:todayIso()});
+// A cop can carry up to two distinct intro notes plus a V1 legacy fallback.
+// They are different moments and must not overwrite each other in the UI.
+const introNotesOf=cop=>{
+  const sesh=cop?.session;
+  const out=[];
+  if(cop?.firstNotes?.trim())out.push({key:"first",label:"first impressions",text:cop.firstNotes,date:cop.date});
+  if(sesh?.notes?.trim())out.push({key:"sesh",label:"first sesh",text:sesh.notes,date:sesh.date||cop?.date});
+  // V1 stored first impressions as notes[0]; only fall back when neither of the above exists
+  if(out.length===0&&cop?.notes?.length>0)out.push({key:"legacy",label:"first impressions",text:cop.notes[0].text,date:cop.notes[0].date||cop?.date});
+  return out;
+};
+const usesLegacyIntroNote=cop=>!cop?.firstNotes?.trim()&&!cop?.session?.notes?.trim();
 const resolveIso=rec=>rec?.dateIso||inferIso(rec?.date);
 const monthKeyOf=rec=>resolveIso(rec)?.slice(0,7)||"unknown";           // "2026-07", sorts lexically
 const sortMonthKeys=keys=>[...keys].sort((a,b)=>{                        // newest first, "unknown" last
@@ -898,7 +910,12 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
           {hasSetting&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:s.setting==="outdoor"?"rgba(91,138,114,0.2)":s.bedtime?"rgba(44,44,74,0.5)":typeTheme.cardBg,color:s.setting==="outdoor"?"#6B8F5A":s.bedtime?"#C9B8F0":typeTheme.muted}}>{s.setting==="outdoor"?"outdoor":s.bedtime?"bedtime":"indoor"}</span>}
           {s?.smokesLike&&s.smokesLike!==cop?.type&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"rgba(193,127,74,0.15)",color:"#C17F4A"}}>smokes {s.smokesLike.toLowerCase()}</span>}
         </div>
-        {(()=>{const fi=cop?.firstNotes||(cop?.notes?.length>0?cop.notes[0].text:null)||cop?.session?.notes||null;if(!fi)return null;const fiDate=cop?.firstNotes?cop?.date:cop?.notes?.[0]?.date||cop?.date;return(<div style={{marginTop:8}}><p style={{fontSize:10,color:typeTheme.muted,margin:"0 0 2px"}}>first impressions{fiDate?` · ${fiDate}`:""}</p><p style={{fontSize:12,color:typeTheme.text,margin:0,lineHeight:1.4,opacity:0.8}}>{fi}</p></div>);})()}
+        {introNotesOf(cop).map(n=>(
+          <div key={n.key} style={{marginTop:8}}>
+            <p style={{fontSize:10,color:typeTheme.muted,margin:"0 0 2px"}}>{n.label}{n.date?` · ${n.date}`:""}</p>
+            <p style={{fontSize:12,color:typeTheme.text,margin:0,lineHeight:1.4,opacity:0.8}}>{n.text}</p>
+          </div>
+        ))}
       </div>
 
       {/* Vibes + taste */}
@@ -951,7 +968,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
         <div style={{display:"flex",gap:8}}><button onClick={()=>setMixMode(null)} style={{flex:1,padding:10,borderRadius:8,fontSize:12,background:"transparent",color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit"}}>cancel</button><button onClick={onSaveNote} style={{flex:1,padding:10,borderRadius:8,fontSize:12,fontWeight:500,background:typeTheme.accent,color:cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit"}}>save note</button></div>
       </div>}
       {(cop?.notes||[]).length===0&&!mixMode&&<p style={{fontSize:13,color:typeTheme.muted,fontStyle:"italic"}}>no notes yet</p>}
-      {(cop?.notes||[]).map((n,ni)=>{const isFirstImpression=!cop?.firstNotes&&ni===0;return(<div key={n.id} style={{background:typeTheme.cardBg,borderRadius:10,padding:12,marginBottom:6,border:`0.5px solid ${typeTheme.cardBorder}`,borderLeft:`3px solid ${isFirstImpression?typeTheme.muted:typeTheme.accent}`}}>
+      {(cop?.notes||[]).map((n,ni)=>{const isFirstImpression=usesLegacyIntroNote(cop)&&ni===0;return(<div key={n.id} style={{background:typeTheme.cardBg,borderRadius:10,padding:12,marginBottom:6,border:`0.5px solid ${typeTheme.cardBorder}`,borderLeft:`3px solid ${isFirstImpression?typeTheme.muted:typeTheme.accent}`}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:10,color:typeTheme.muted}}>{n.date}</span>
@@ -2487,7 +2504,7 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
           </div>
           {coppedEntries.map(e=>(
             <StrainCard key={e.id} name={e.strainName} type={e.type}
-              meta={`${(e.type||"unknown").toUpperCase()} · logged ${e.date||"—"}`}
+              meta={`${(e.type||"unknown").toUpperCase()} · logged ${e.date||"—"}${e.amount?` · ${e.amount}`:""}`}
               onClick={()=>onSelectStrain({id:e.id,name:e.strainName,type:e.type,cops:[{id:e.id,type:e.type,lean:e.lean,terpenes:e.terpenes||[],date:e.date,notes:e.firstNotes?[e.firstNotes]:[],experiences:[],mixes:[]}]})}
             />
           ))}
@@ -2501,9 +2518,10 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
             if(!strain)return null;
             const days=daysSince(oh);
             const type=oh.type||strain.type;
+            const amount=strain.cops?.find(c=>c.id===oh.copId)?.amount;
             return(
               <StrainCard key={oh.copId||oh.strainId} name={strain.name} type={type}
-                meta={`${(type||"unknown").toUpperCase()}${days!==null?` · day ${days}`:""}${oh.lite?" · LITE 🌬️":""}`}
+                meta={`${(type||"unknown").toUpperCase()}${amount?` · ${amount}`:""}${days!==null?` · day ${days}`:""}${oh.lite?" · LITE 🌬️":""}`}
                 onClick={()=>onSelectStrain(strain)}
               />
             );
@@ -2625,8 +2643,11 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
         {/* Body */}
         <div style={{padding:"12px 16px 14px",background:`linear-gradient(180deg,${theme.accent}15,transparent 50%)`}}>
           {/* Cop info */}
-          <div style={{display:"flex",gap:4,marginBottom:10}}>
-            <span style={{padding:"4px 10px",borderRadius:12,fontSize:10,background:`${theme.accent}30`,color:theme.text,border:`0.5px solid ${theme.accent}40`}}>cop 1 · {cop?.date||"—"}</span>
+          <div style={{display:"flex",gap:4,marginBottom:10,flexWrap:"wrap"}}>
+            <span style={{padding:"4px 10px",borderRadius:12,fontSize:10,background:`${theme.accent}30`,color:theme.text,border:`0.5px solid ${theme.accent}40`}}>cop {copIdx+1} · {cop?.date||"—"}</span>
+            {cop?.amount&&<span style={{padding:"4px 10px",borderRadius:12,fontSize:10,background:theme.cardBg,color:theme.lightText,border:`0.5px solid ${theme.cardBorder}`}}>⚖️ {cop.amount}</span>}
+            {strain.intent&&<span style={{padding:"4px 10px",borderRadius:12,fontSize:10,background:theme.cardBg,color:theme.lightText,border:`0.5px solid ${theme.cardBorder}`}}>{strain.intent==="asleep"?"🌙":strain.intent==="awake"?"☀️":"🏕️"} {strain.intent}</span>}
+            {cop?.lite&&<span style={{padding:"4px 10px",borderRadius:12,fontSize:10,background:theme.cardBg,color:theme.dimText,border:`0.5px solid ${theme.cardBorder}`}}>lite 🌬️</span>}
           </div>
 
           {/* Cop switcher — re-copped strains keep every cop's own notes/experiences */}
@@ -2684,10 +2705,12 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
                   {session&&<span style={{fontSize:9,padding:"3px 8px",borderRadius:6,background:session.setting==="outdoor"?"rgba(91,138,114,0.2)":session.bedtime?"rgba(44,44,74,0.5)":theme.cardBg,color:session.setting==="outdoor"?"#6B8F5A":session.bedtime?"#C9B8F0":theme.dimText}}>{session.setting==="outdoor"?"outdoor":session.bedtime?"bedtime":"indoor"}</span>}
                   {session?.smokesLike&&session.smokesLike!==cop?.type&&<span style={{fontSize:9,padding:"3px 8px",borderRadius:6,background:"rgba(193,127,74,0.15)",color:"#C17F4A"}}>smokes {session.smokesLike.toLowerCase()}</span>}
                 </div>
-                {(()=>{const fi=cop?.firstNotes||(cop?.notes?.length>0?cop.notes[0].text:null)||session?.notes||null;if(!fi)return null;const fiDate=cop?.firstNotes?cop?.date:cop?.notes?.[0]?.date||cop?.date;return(<div>
-                  <div style={{fontSize:9,color:theme.dimText,marginBottom:2}}>first impressions{fiDate?` · ${fiDate}`:""}</div>
-                  <div style={{fontSize:11,color:theme.text,lineHeight:1.4,opacity:0.85}}>{fi}</div>
-                </div>);})()}
+                {introNotesOf(cop).map(n=>(
+                  <div key={n.key} style={{marginTop:6}}>
+                    <div style={{fontSize:9,color:theme.dimText,marginBottom:2}}>{n.label}{n.date?` · ${n.date}`:""}</div>
+                    <div style={{fontSize:11,color:theme.text,lineHeight:1.4,opacity:0.85}}>{n.text}</div>
+                  </div>
+                ))}
               </div>}
 
               {/* Vibes + taste */}
