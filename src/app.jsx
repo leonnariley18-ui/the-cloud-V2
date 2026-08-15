@@ -1213,7 +1213,7 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
     {terpEntries.length>0&&<><p style={{fontSize:10,fontWeight:500,color:IS.muted,letterSpacing:0.5,textTransform:"uppercase",margin:"20px 0 10px"}}>cop again rates</p>{terpEntries.filter(([t])=>terpCopAgain[t]?.total>0).map(([terp])=>{const ca=terpCopAgain[terp];const pct=Math.round(ca.yes/ca.total*100);return(<div key={terp+"ca"} style={{marginBottom:7}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:11,color:IS.text}}>{terp.toLowerCase()}</span><span style={{fontSize:10,color:IS.muted}}>{pct}%</span></div><div style={{height:3,background:"#DDD5C4",borderRadius:2}}><div style={{height:3,background:"#4A6B3A",borderRadius:2,width:`${pct}%`}}/></div></div>);})}</>}
   </div>;
 
-  const getSoloRating=(strainId)=>{const s=strains.find(x=>x.id===strainId);if(!s)return null;const cop=s.cops.find(c=>c.session?.rating);return cop?cop.session.rating:null;};
+  const getSoloRating=(strainId)=>{const s=strains.find(x=>x.id===strainId);if(!s)return null;const cop=[...s.cops].reverse().find(c=>(c.session?.rating||0)>0);return cop?cop.session.rating:null;};
   const getStrainType=(name)=>{const s=strains.find(x=>x.name===name);return s?.cops?.[s.cops.length-1]?.type||null;};
   const peekByName=(name)=>{const s=strains.find(x=>x.name===name);if(s&&onPeek)onPeek(s);};
   const mixProfile=<div>
@@ -2287,7 +2287,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
   const handleSaveLiteCop=()=>{
     if(!cop.name.trim())return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
-    if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:s.intent||cop.intent||null,cops:[...s.cops,newCop]}));
+    if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
     if(activeReupId)setReups(addLiteCopToReup(openReups,activeReupId,copId,copDate,copIso));
     setOnHand([onHandEntry,...onHand]);
@@ -3903,7 +3903,7 @@ function MobileShell(){
   const handleSaveLiteCop=()=>{
     if(!cop.name.trim())return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
-    if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:s.intent||cop.intent||null,cops:[...s.cops,newCop]}));
+    if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
     if(activeReupId)setReups(addLiteCopToReup(reups,activeReupId,copId,copDate,copIso));
     setOnHand([onHandEntry,...onHand]);
@@ -3917,7 +3917,7 @@ function MobileShell(){
       session:{rating:session.rating,smokesLike:session.smokesLike,smokesLikeLean:session.smokesLikeLean,setting:session.setting,bedtime:session.bedtime,spectrums:{sw:session.sw,sf:session.sf},pull:session.pull,tasteTags:[...session.tasteTags],vibeTags:[...session.vibeTags],notes:session.notes,copAgain:session.copAgain,date:today()},
       experiences:[],mixes:[],notes:[]};
     const intentForStrain=editEntry.intent||null;
-    if(editEntry.strainId){setStrains(strains.map(s=>s.id!==editEntry.strainId?s:{...s,intent:s.intent||intentForStrain,cops:[...s.cops,newCop]}));
+    if(editEntry.strainId){setStrains(strains.map(s=>s.id!==editEntry.strainId?s:{...s,intent:intentForStrain||s.intent,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:editEntry.strainName,parents:editEntry.unknownLineage?["unknown lineage"]:[editEntry.parent1,editEntry.parent2].filter(Boolean),intent:intentForStrain,cops:[newCop]},...strains]);}
     if(editEntry.reupId)setReups(reups.map(r=>r.id!==editEntry.reupId?r:{...r,coppedIds:(r.coppedIds||[]).filter(id=>id!==editEntry.id),copIds:[...r.copIds,copId]}));
     if(session.copAgain!=="Never again")setOnHand([{strainName:editEntry.strainName,strainId:strainId,copId:copId,type:editEntry.type,terpenes:[...editEntry.terpenes],date:editEntry.date,dateIso:resolveIso(editEntry),rating:session.rating},...onHand]);
