@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
    SUPABASE
    ═══════════════════════════════════════════ */
 const SB_URL="https://pukzhmhevjbfwvhjzppr.supabase.co";
-const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB1a3pobWhldmpiZnd2aGp6cHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3NjUzNTYsImV4cCI6MjA5MzM0MTM1Nn0.-Jl1tv-xeOTwv6cd-OgF-ovooLfYyzoaA2c7Seax3Zo";
+const SB_KEY="sb_publishable_HD6fsFZMd5nhNAyENz7uzg_GNVk59PV";
 const supabase=createClient(SB_URL,SB_KEY);
 
 /* ═══════════════════════════════════════════
@@ -403,7 +403,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   finishingCop,finishCopAgain,setFinishCopAgain,
   handleSaveCop,handleSaveLiteCop,handleSaveSession,handleMarkDone,handleConfirmDone,
   handleReviewMix,handleSaveMixReview,
-  setCoppedIntent,setCoppedAmount,setFinishingCop,
+  setCoppedIntent,setCoppedAmount,setCoppedTerpenes,setFinishingCop,
   openDetail,openDetailTab,reset,showSugg,setShowSugg,legacyStrains,handleAddReup,handleDeleteReup,confirmDeleteItem,
   handleInlineNote,handleInlineExperience,onAddMixQueue}){
 
@@ -526,7 +526,10 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
           </div>}
         <button onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:""})} style={{fontSize:11,padding:"4px 12px",borderRadius:8,background:cop.unknownLineage?"rgba(240,235,225,0.15)":"transparent",color:cop.unknownLineage?"#F0EBE1":"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit",marginBottom:20}}>unknown lineage{cop.unknownLineage?" ✓":""}</button>
       </>}
-      <button onClick={isLite?handleSaveLiteCop:handleSaveCop} style={{width:"100%",padding:14,borderRadius:10,fontSize:15,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit"}}>{isLite?"add to lite re-up":"save cop"}</button>
+      {(()=>{const ready=cop.name.trim()&&cop.terpenes.length>0;return(<>
+        <button onClick={()=>ready&&(isLite?handleSaveLiteCop():handleSaveCop())} disabled={!ready} style={{width:"100%",padding:14,borderRadius:10,fontSize:15,fontWeight:500,background:ready?P.terracotta:"rgba(240,235,225,0.08)",color:ready?P.cream:"rgba(240,235,225,0.3)",border:"none",cursor:ready?"pointer":"default",fontFamily:"inherit"}}>{isLite?"add to lite re-up":"save cop"}</button>
+        {!ready&&<p style={{fontSize:11,color:"rgba(240,235,225,0.4)",margin:"8px 0 0",textAlign:"center"}}>{!cop.name.trim()?"needs a strain name":"add at least one terpene first 🌿"}</p>}
+      </>);})()}
       {isLite&&<button onClick={()=>{reset("cop");setActiveReupId(null);setView(null);}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,marginTop:8,background:"transparent",color:"rgba(240,235,225,0.5)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit"}}>done adding 🤙🏾</button>}
     </GlassCard>
   </Wrapper>);
@@ -585,10 +588,14 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
     {coppedEntries.length>0&&<><StashLabel>ready to try</StashLabel>{coppedEntries.map(e=><SolidCard key={e.id} style={{marginBottom:8,border:"1.5px dashed rgba(193,127,74,0.3)"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><TypeBadge type={e.type}/><p style={{fontWeight:500,fontSize:15,margin:0,color:"#F0EBE1"}}>{e.strainName}</p><span style={{fontSize:10,background:P.terracotta,color:P.cream,padding:"2px 8px",borderRadius:10,fontWeight:500}}>copped</span>{e.strainId&&<span style={{fontSize:10,color:P.sage}}>re-cop</span>}{e.intent&&<IntentBadge intent={e.intent}/>}{e.amount&&<span style={{fontSize:10,color:"rgba(240,235,225,0.5)"}}>{e.amount}</span>}</div>
       <p style={{fontSize:12,color:"rgba(240,235,225,0.5)",margin:"2px 0 6px"}}>{[e.type?.toLowerCase(),e.lean?.toLowerCase(),e.source==="TL"?"TL":e.source?.toLowerCase(),e.date].filter(Boolean).join(" · ")}</p>
+      {!(e.terpenes?.length>0)&&<div style={{marginBottom:8,padding:10,borderRadius:8,background:"rgba(193,127,74,0.08)",border:"0.5px dashed rgba(193,127,74,0.35)"}}>
+        <p style={{fontSize:11,color:"#C17F4A",margin:"0 0 8px"}}>no terpenes on this one — add them 🌿</p>
+        <TerpeneSelector selected={e.terpenes||[]} onChange={t=>setCoppedTerpenes(e.id,t)}/>
+      </div>}
       {e.terpenes?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6}}>{e.terpenes.map(t=><span key={t} style={{fontSize:10,background:"rgba(107,127,90,0.2)",color:P.sage,padding:"2px 6px",borderRadius:8}}>{t.toLowerCase()}</span>)}</div>}
       {!e.intent&&<div style={{display:"flex",gap:4,marginBottom:8}}>{["asleep","awake","adventure"].map(i=><button key={i} onClick={()=>setCoppedIntent(e.id,i)} style={{fontSize:10,padding:"3px 9px",borderRadius:8,border:"0.5px solid rgba(240,235,225,0.15)",background:"rgba(240,235,225,0.06)",color:"rgba(240,235,225,0.5)",cursor:"pointer",fontFamily:"inherit"}}>{i==="asleep"?"🌙":i==="awake"?"☀️":"🏕️"} {i}</button>)}</div>}
       {!e.amount&&<div style={{display:"flex",gap:4,marginBottom:8}}>{["8th","quarter","half","oz"].map(a=><button key={a} onClick={()=>setCoppedAmount(e.id,a)} style={{fontSize:10,padding:"3px 9px",borderRadius:8,border:"0.5px solid rgba(240,235,225,0.15)",background:"rgba(240,235,225,0.06)",color:"rgba(240,235,225,0.5)",cursor:"pointer",fontFamily:"inherit"}}>{a}</button>)}</div>}
-      <button onClick={()=>{setEditEntry(e);setView("session");}} style={{width:"100%",padding:10,borderRadius:8,fontSize:13,fontWeight:500,background:P.terracotta,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit"}}>log first session</button>
+      <button onClick={()=>{if(e.terpenes?.length>0){setEditEntry(e);setView("session");}}} disabled={!(e.terpenes?.length>0)} style={{width:"100%",padding:10,borderRadius:8,fontSize:13,fontWeight:500,background:e.terpenes?.length>0?P.terracotta:"rgba(240,235,225,0.08)",color:e.terpenes?.length>0?P.cream:"rgba(240,235,225,0.3)",border:"none",cursor:e.terpenes?.length>0?"pointer":"default",fontFamily:"inherit"}}>log first session</button>
     </SolidCard>)}<div style={{margin:"16px 0",borderTop:"0.5px solid rgba(240,235,225,0.08)"}}/></>}
 
     {/* On hand */}
@@ -2145,10 +2152,22 @@ function useCloudData(){
   const[insightsDismissed,setInsightsDismissed]=useState([]);
   const[insightsSaved,setInsightsSaved]=useState([]);
   const[legacyStrains]=useState(LEGACY_STRAINS);
+  const[loadError,setLoadError]=useState(null);
+  const hadStoredRow=useRef(false);   // did the server actually have data for us?
+  const skipEchoSave=useRef(false);   // suppress the save that just mirrors the load
 
   const loadData=async()=>{
     const{data:rows,error}=await supabase.from("cloud_data").select("*").eq("user_id",USER_ID).maybeSingle();
     console.log("loadData rows:",rows,"error:",error);
+    // A failed read must never look like "you have no data" -- returning here leaves
+    // dataLoaded false, which keeps the autosave effect switched off entirely.
+    if(error){
+      console.error("cLOUD: load failed, refusing to enable saving.",error);
+      setLoadError(error.message||"couldn't reach the cloud");
+      return;
+    }
+    hadStoredRow.current=!!rows;
+    skipEchoSave.current=true;
     const initialData=rows?.data||{};
     // backfillIso is idempotent — it only fills where dateIso is absent, so this
     // is safe to leave in place and safe to re-run. Persists via the autosave effect.
@@ -2182,11 +2201,22 @@ function useCloudData(){
 
   useEffect(()=>{
     if(!dataLoaded)return;
+    // the first fire after a load is just an echo of what was read -- writing it back
+    // is pointless, and it was the vector that could overwrite good data with empty
+    if(skipEchoSave.current){skipEchoSave.current=false;return;}
     const d={strains,coppedEntries,onHand,mixQueue,reups,finishedReups,savedComparisons,savedTips,insightsDismissed,insightsSaved};
+    // nothing in the app can empty every collection at once, so if that is the state
+    // while the server had a row, something is wrong -- do not persist it
+    const allEmpty=strains.length===0&&coppedEntries.length===0&&onHand.length===0&&mixQueue.length===0&&reups.length===0&&finishedReups.length===0;
+    if(allEmpty&&hadStoredRow.current){
+      console.error("cLOUD: blocked a save that would have emptied stored data.");
+      setLoadError("blocked an empty save — reload before logging anything");
+      return;
+    }
     saveToCloud(d);
   },[strains,coppedEntries,onHand,mixQueue,reups,finishedReups,savedComparisons,savedTips,insightsDismissed,insightsSaved]);
 
-  return{dataLoaded,synced,strains,setStrains,coppedEntries,setCoppedEntries,onHand,setOnHand,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,setSavedComparisons,savedTips,setSavedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved,legacyStrains};
+  return{dataLoaded,synced,loadError,strains,setStrains,coppedEntries,setCoppedEntries,onHand,setOnHand,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,setSavedComparisons,savedTips,setSavedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved,legacyStrains};
 }
 
 /* ═══════════════════════════════════════════
@@ -2194,6 +2224,17 @@ function useCloudData(){
    ═══════════════════════════════════════════ */
 const retroCard={border:"1.5px solid rgba(232,200,154,0.2)",background:"rgba(255,255,255,0.06)",borderRadius:4,position:"relative",overflow:"hidden"};
 const retroCardTop={content:"",position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,rgba(232,200,154,0.25),rgba(232,200,154,0.05))"};
+function CloudErrorBanner({message}){
+  if(!message)return null;
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,background:"#7A2E1E",color:"#FFE9E2",
+      padding:"8px 14px",fontSize:12,fontFamily:"inherit",lineHeight:1.4,textAlign:"center",
+      boxShadow:"0 2px 12px rgba(0,0,0,0.4)"}}>
+      ⚠️ can't reach your cloud data — <strong>don't log anything yet</strong>, it won't save. {message}
+    </div>
+  );
+}
+
 function RetroCard({children,style,onClick}){
   return(
     <div onClick={onClick} style={{...retroCard,cursor:onClick?"pointer":"default",...style}}>
@@ -2275,7 +2316,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
   };
 
   const handleSaveCop=()=>{
-    if(!cop.name.trim())return;
+    if(!cop.name.trim()||cop.terpenes.length===0)return;
     const newId=Date.now();
     setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
@@ -2285,7 +2326,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
 
   // Lite cop — straight to on-hand, no first session. Mirrors mobile's handleSaveLiteCop.
   const handleSaveLiteCop=()=>{
-    if(!cop.name.trim())return;
+    if(!cop.name.trim()||cop.terpenes.length===0)return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
@@ -2434,7 +2475,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
                 </div>
               )}
               <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-                <button onClick={isLite?handleSaveLiteCop:handleSaveCop} disabled={!cop.name.trim()} style={{padding:"10px 24px",background:cop.name.trim()?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:cop.name.trim()?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"inherit",cursor:cop.name.trim()?"pointer":"default"}}>{isLite?"add to lite re-up":"save cop"}</button>
+                <button onClick={isLite?handleSaveLiteCop:handleSaveCop} disabled={!cop.name.trim()||cop.terpenes.length===0} title={cop.terpenes.length===0?"add at least one terpene first":undefined} style={{padding:"10px 24px",background:cop.name.trim()&&cop.terpenes.length>0?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:cop.name.trim()&&cop.terpenes.length>0?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"inherit",cursor:cop.name.trim()&&cop.terpenes.length>0?"pointer":"default"}}>{isLite?"add to lite re-up":"save cop"}</button>
               </div>
             </RetroWindow>
           </>
@@ -3670,7 +3711,7 @@ function DesktopComparePage({strains,reups=[],savedComparisons,onSaveComparison,
 }
 
 function DesktopShell(){
-  const{synced,strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,setSavedComparisons,savedTips,setSavedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved}=useCloudData();
+  const{synced,loadError,strains,setStrains,legacyStrains,onHand,setOnHand,coppedEntries,setCoppedEntries,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,setSavedComparisons,savedTips,setSavedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved}=useCloudData();
   const[page,setPage]=useState("home");
   const[stashOpen,setStashOpen]=useState(false);
   const[helpOpen,setHelpOpen]=useState(false);
@@ -3752,6 +3793,7 @@ function DesktopShell(){
 
   return(
     <div style={{fontFamily:"'DM Sans',sans-serif",display:"flex",height:"100vh",background:bg,transition:"background 0.3s"}}>
+      <CloudErrorBanner message={loadError}/>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Playfair+Display:wght@400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
       <DesktopSidebar currentPage={page} onNavigate={navigate} synced={synced} stashOpen={stashOpen} onOpenHelp={()=>setHelpOpen(true)}/>
       {!stashOpen&&(
@@ -3831,7 +3873,7 @@ export default function App(){
    MOBILE SHELL
    ═══════════════════════════════════════════ */
 function MobileShell(){
-  const{dataLoaded,synced,strains,setStrains,coppedEntries,setCoppedEntries,onHand,setOnHand,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,setSavedComparisons,savedTips,setSavedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved,legacyStrains}=useCloudData();
+  const{dataLoaded,synced,loadError,strains,setStrains,coppedEntries,setCoppedEntries,onHand,setOnHand,mixQueue,setMixQueue,reups,setReups,finishedReups,setFinishedReups,savedComparisons,setSavedComparisons,savedTips,setSavedTips,insightsDismissed,setInsightsDismissed,insightsSaved,setInsightsSaved,legacyStrains}=useCloudData();
 
   const[page,setPage]=useState("home");
   const[menuOpen,setMenuOpen]=useState(false);
@@ -3891,7 +3933,7 @@ function MobileShell(){
 
   // ── Handlers ──
   const handleSaveCop=()=>{
-    if(!cop.name.trim())return;
+    if(!cop.name.trim()||cop.terpenes.length===0)return;
     const newId=Date.now();
     setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(reups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
@@ -3901,7 +3943,7 @@ function MobileShell(){
   // Lite cop: straight to on-hand, no first session. session stays null and lite:true
   // keeps it out of every analytics surface (they all filter c.session).
   const handleSaveLiteCop=()=>{
-    if(!cop.name.trim())return;
+    if(!cop.name.trim()||cop.terpenes.length===0)return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
@@ -3944,6 +3986,7 @@ function MobileShell(){
 
   const setCoppedIntent=(id,intent)=>setCoppedEntries(prev=>prev.map(e=>e.id!==id?e:e.intent?e:{...e,intent}));
   const setCoppedAmount=(id,amount)=>setCoppedEntries(prev=>prev.map(e=>e.id!==id?e:e.amount?e:{...e,amount}));
+  const setCoppedTerpenes=(id,terpenes)=>setCoppedEntries(prev=>prev.map(e=>e.id!==id?e:{...e,terpenes:[...terpenes]}));
 
   const toggleStar=()=>{if(!detailStrain)return;const updated=strains.map(s=>s.id!==detailStrain.id?s:{...s,starred:!s.starred});setStrains(updated);setDetailStrain({...detailStrain,starred:!detailStrain.starred});};
 
@@ -4058,7 +4101,7 @@ function MobileShell(){
   const renderPage=()=>{
     switch(page){
       case "home": return <HomePage strains={strains} onHand={onHand} coppedEntries={coppedEntries} mixQueue={mixQueue} finishedReups={finishedReups} onNavigate={navigate} onLogCop={()=>{setPage("stash");setMenuOpen(false);setView("reupPicker");window.scrollTo(0,0);}} onOpenDetail={openDetail} savedComparisons={savedComparisons} savedTips={savedTips}/>;
-      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveLiteCop={handleSaveLiteCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
+      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveLiteCop={handleSaveLiteCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setCoppedTerpenes={setCoppedTerpenes} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
       case "library": return <LibraryPage strains={strains} legacyStrains={legacyStrains} onOpenDetail={openDetail} onPeek={s=>setPeekStrain(s)}/>;
       case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} setCopIdx={setDetailCopIdx} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
       case "insights": return <InsightsPage strains={strains} onHand={onHand} onPeek={s=>setPeekStrain(s)} dismissed={insightsDismissed} setDismissed={setInsightsDismissed} saved={insightsSaved} setSaved={setInsightsSaved}/>;
@@ -4069,6 +4112,7 @@ function MobileShell(){
   };
 
   return(<div style={{fontFamily:"'DM Sans',sans-serif",maxWidth:480,margin:"0 auto",minHeight:"100vh"}}>
+    <CloudErrorBanner message={loadError}/>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=Playfair+Display:wght@400;500&display=swap" rel="stylesheet"/>
     <TopBar page={page} onMenuOpen={()=>setMenuOpen(true)} synced={synced} onHandCount={onHandCount}/>
     <MenuOverlay open={menuOpen} currentPage={page} onNavigate={navigate} onClose={()=>setMenuOpen(false)} strainCount={strains.length} mixCount={mixCount} reupCount={reupCount}/>
