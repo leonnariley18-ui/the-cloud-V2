@@ -23,6 +23,7 @@ const todayIso=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.get
    `dateIso` ("2026-07-19") is its sortable, unambiguous twin, used for library
    grouping, month ordering and day counts. Reads go through resolveIso, which
    falls back to inference so records predating the field still work.        */
+const MIN_TERPS=3;   // a cop is not considered logged until it has this many terpenes
 const LEGACY_DATA_YEAR=2026;   // every record that predates dateIso was logged in 2026
 const isoOf=(dateStr,year)=>{
   if(!dateStr)return null;
@@ -416,6 +417,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   const handleSelectExisting=strain=>{setCop({...cop,name:strain.name,type:getLatestCop(strain).type||"",lean:getLatestCop(strain).lean||"",parent1:strain.parents?.[0]||"",parent2:strain.parents?.[1]||"",existingStrainId:strain.id});setNameInput(strain.name);setShowSugg(false);};
 
   const[inlineCard,setInlineCard]=useState(null);
+  const[terpFixId,setTerpFixId]=useState(null);   // keeps the terpene fixer open past the first pick
   const[inlineText,setInlineText]=useState("");
   const[inlineMixWith,setInlineMixWith]=useState("");
   const[expSheet,setExpSheet]=useState(null);
@@ -526,9 +528,9 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
           </div>}
         <button onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:""})} style={{fontSize:11,padding:"4px 12px",borderRadius:8,background:cop.unknownLineage?"rgba(240,235,225,0.15)":"transparent",color:cop.unknownLineage?"#F0EBE1":"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit",marginBottom:20}}>unknown lineage{cop.unknownLineage?" ✓":""}</button>
       </>}
-      {(()=>{const ready=cop.name.trim()&&cop.terpenes.length>0;return(<>
+      {(()=>{const ready=cop.name.trim()&&cop.terpenes.length>=MIN_TERPS;return(<>
         <button onClick={()=>ready&&(isLite?handleSaveLiteCop():handleSaveCop())} disabled={!ready} style={{width:"100%",padding:14,borderRadius:10,fontSize:15,fontWeight:500,background:ready?P.terracotta:"rgba(240,235,225,0.08)",color:ready?P.cream:"rgba(240,235,225,0.3)",border:"none",cursor:ready?"pointer":"default",fontFamily:"inherit"}}>{isLite?"add to lite re-up":"save cop"}</button>
-        {!ready&&<p style={{fontSize:11,color:"rgba(240,235,225,0.4)",margin:"8px 0 0",textAlign:"center"}}>{!cop.name.trim()?"needs a strain name":"add at least one terpene first 🌿"}</p>}
+        {!ready&&<p style={{fontSize:11,color:"rgba(240,235,225,0.4)",margin:"8px 0 0",textAlign:"center"}}>{!cop.name.trim()?"needs a strain name":`${cop.terpenes.length} of ${MIN_TERPS} terpenes 🌿`}</p>}
       </>);})()}
       {isLite&&<button onClick={()=>{reset("cop");setActiveReupId(null);setView(null);}} style={{width:"100%",padding:12,borderRadius:10,fontSize:13,marginTop:8,background:"transparent",color:"rgba(240,235,225,0.5)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit"}}>done adding 🤙🏾</button>}
     </GlassCard>
@@ -588,14 +590,17 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
     {coppedEntries.length>0&&<><StashLabel>ready to try</StashLabel>{coppedEntries.map(e=><SolidCard key={e.id} style={{marginBottom:8,border:"1.5px dashed rgba(193,127,74,0.3)"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}><TypeBadge type={e.type}/><p style={{fontWeight:500,fontSize:15,margin:0,color:"#F0EBE1"}}>{e.strainName}</p><span style={{fontSize:10,background:P.terracotta,color:P.cream,padding:"2px 8px",borderRadius:10,fontWeight:500}}>copped</span>{e.strainId&&<span style={{fontSize:10,color:P.sage}}>re-cop</span>}{e.intent&&<IntentBadge intent={e.intent}/>}{e.amount&&<span style={{fontSize:10,color:"rgba(240,235,225,0.5)"}}>{e.amount}</span>}</div>
       <p style={{fontSize:12,color:"rgba(240,235,225,0.5)",margin:"2px 0 6px"}}>{[e.type?.toLowerCase(),e.lean?.toLowerCase(),e.source==="TL"?"TL":e.source?.toLowerCase(),e.date].filter(Boolean).join(" · ")}</p>
-      {!(e.terpenes?.length>0)&&<div style={{marginBottom:8,padding:10,borderRadius:8,background:"rgba(193,127,74,0.08)",border:"0.5px dashed rgba(193,127,74,0.35)"}}>
-        <p style={{fontSize:11,color:"#C17F4A",margin:"0 0 8px"}}>no terpenes on this one — add them 🌿</p>
-        <TerpeneSelector selected={e.terpenes||[]} onChange={t=>setCoppedTerpenes(e.id,t)}/>
+      {((e.terpenes?.length||0)<MIN_TERPS||terpFixId===e.id)&&<div style={{marginBottom:8,padding:10,borderRadius:8,background:"rgba(193,127,74,0.08)",border:"0.5px dashed rgba(193,127,74,0.35)"}}>
+        <p style={{fontSize:11,color:"#C17F4A",margin:"0 0 8px"}}>{(e.terpenes?.length||0)===0?`no terpenes on this one — add at least ${MIN_TERPS} 🌿`:`${e.terpenes.length} of ${MIN_TERPS} — keep going 🌿`}</p>
+        <TerpeneSelector selected={e.terpenes||[]} onChange={t=>{const was=e.terpenes?.length||0;setCoppedTerpenes(e.id,t);setTerpFixId(t.length>=MIN_TERPS&&was<MIN_TERPS?null:e.id);}}/>
+        {(e.terpenes?.length||0)>=MIN_TERPS&&<button onClick={()=>setTerpFixId(null)} style={{width:"100%",marginTop:8,padding:8,borderRadius:8,fontSize:12,fontWeight:500,background:P.sage,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit"}}>done ✓</button>}
       </div>}
-      {e.terpenes?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6}}>{e.terpenes.map(t=><span key={t} style={{fontSize:10,background:"rgba(107,127,90,0.2)",color:P.sage,padding:"2px 6px",borderRadius:8}}>{t.toLowerCase()}</span>)}</div>}
+      {e.terpenes?.length>0&&<div onClick={()=>setTerpFixId(e.id)} title="tap to edit terpenes" style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6,cursor:"pointer"}}>{e.terpenes.map(t=><span key={t} style={{fontSize:10,background:"rgba(107,127,90,0.2)",color:P.sage,padding:"2px 6px",borderRadius:8}}>{t.toLowerCase()}</span>)}</div>}
       {!e.intent&&<div style={{display:"flex",gap:4,marginBottom:8}}>{["asleep","awake","adventure"].map(i=><button key={i} onClick={()=>setCoppedIntent(e.id,i)} style={{fontSize:10,padding:"3px 9px",borderRadius:8,border:"0.5px solid rgba(240,235,225,0.15)",background:"rgba(240,235,225,0.06)",color:"rgba(240,235,225,0.5)",cursor:"pointer",fontFamily:"inherit"}}>{i==="asleep"?"🌙":i==="awake"?"☀️":"🏕️"} {i}</button>)}</div>}
       {!e.amount&&<div style={{display:"flex",gap:4,marginBottom:8}}>{["8th","quarter","half","oz"].map(a=><button key={a} onClick={()=>setCoppedAmount(e.id,a)} style={{fontSize:10,padding:"3px 9px",borderRadius:8,border:"0.5px solid rgba(240,235,225,0.15)",background:"rgba(240,235,225,0.06)",color:"rgba(240,235,225,0.5)",cursor:"pointer",fontFamily:"inherit"}}>{a}</button>)}</div>}
-      <button onClick={()=>{if(e.terpenes?.length>0){setEditEntry(e);setView("session");}}} disabled={!(e.terpenes?.length>0)} style={{width:"100%",padding:10,borderRadius:8,fontSize:13,fontWeight:500,background:e.terpenes?.length>0?P.terracotta:"rgba(240,235,225,0.08)",color:e.terpenes?.length>0?P.cream:"rgba(240,235,225,0.3)",border:"none",cursor:e.terpenes?.length>0?"pointer":"default",fontFamily:"inherit"}}>log first session</button>
+      {(()=>{const ok=(e.terpenes?.length||0)>=MIN_TERPS;return(
+        <button onClick={()=>{if(ok){setEditEntry(e);setView("session");}}} disabled={!ok} style={{width:"100%",padding:10,borderRadius:8,fontSize:13,fontWeight:500,background:ok?P.terracotta:"rgba(240,235,225,0.08)",color:ok?P.cream:"rgba(240,235,225,0.3)",border:"none",cursor:ok?"pointer":"default",fontFamily:"inherit"}}>log first session</button>
+      );})()}
     </SolidCard>)}<div style={{margin:"16px 0",borderTop:"0.5px solid rgba(240,235,225,0.08)"}}/></>}
 
     {/* On hand */}
@@ -2316,7 +2321,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
   };
 
   const handleSaveCop=()=>{
-    if(!cop.name.trim()||cop.terpenes.length===0)return;
+    if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const newId=Date.now();
     setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
@@ -2326,7 +2331,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
 
   // Lite cop — straight to on-hand, no first session. Mirrors mobile's handleSaveLiteCop.
   const handleSaveLiteCop=()=>{
-    if(!cop.name.trim()||cop.terpenes.length===0)return;
+    if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
@@ -2475,7 +2480,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
                 </div>
               )}
               <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-                <button onClick={isLite?handleSaveLiteCop:handleSaveCop} disabled={!cop.name.trim()||cop.terpenes.length===0} title={cop.terpenes.length===0?"add at least one terpene first":undefined} style={{padding:"10px 24px",background:cop.name.trim()&&cop.terpenes.length>0?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:cop.name.trim()&&cop.terpenes.length>0?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"inherit",cursor:cop.name.trim()&&cop.terpenes.length>0?"pointer":"default"}}>{isLite?"add to lite re-up":"save cop"}</button>
+                <button onClick={isLite?handleSaveLiteCop:handleSaveCop} disabled={!cop.name.trim()||cop.terpenes.length<MIN_TERPS} title={cop.terpenes.length<MIN_TERPS?`add at least ${MIN_TERPS} terpenes first`:undefined} style={{padding:"10px 24px",background:cop.name.trim()&&cop.terpenes.length>=MIN_TERPS?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.06)",border:"1.5px solid rgba(232,200,154,0.3)",borderRadius:8,color:cop.name.trim()&&cop.terpenes.length>=MIN_TERPS?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.35)",fontSize:12,fontFamily:"inherit",cursor:cop.name.trim()&&cop.terpenes.length>=MIN_TERPS?"pointer":"default"}}>{isLite?"add to lite re-up":"save cop"}</button>
               </div>
             </RetroWindow>
           </>
@@ -3933,7 +3938,7 @@ function MobileShell(){
 
   // ── Handlers ──
   const handleSaveCop=()=>{
-    if(!cop.name.trim()||cop.terpenes.length===0)return;
+    if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const newId=Date.now();
     setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(reups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
@@ -3943,7 +3948,7 @@ function MobileShell(){
   // Lite cop: straight to on-hand, no first session. session stays null and lite:true
   // keeps it out of every analytics surface (they all filter c.session).
   const handleSaveLiteCop=()=>{
-    if(!cop.name.trim()||cop.terpenes.length===0)return;
+    if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
     }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
