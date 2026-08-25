@@ -1063,7 +1063,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,
             {!locked&&cop?.status==="on-hand"&&<button onClick={()=>deleteFromCop("mixes",m.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#C15A4A",fontFamily:"inherit"}}>{confirmDeleteItem==="mixes-"+m.id?"confirm?":"delete"}</button>}
           </div>
         </div>
-        {!(m.rating>0)&&<div style={{margin:"6px 0 8px",padding:"8px 10px",borderRadius:8,background:"rgba(139,109,139,0.12)",border:"0.5px dashed rgba(139,109,139,0.4)"}}>
+        {!(m.rating>0)&&!locked&&cop?.status==="on-hand"&&<div style={{margin:"6px 0 8px",padding:"8px 10px",borderRadius:8,background:"rgba(139,109,139,0.12)",border:"0.5px dashed rgba(139,109,139,0.4)"}}>
           <p style={{fontSize:11,color:"#C4B0C4",margin:"0 0 6px"}}>this mix was never rated 🍃</p>
           <div style={{display:"flex",justifyContent:"center",gap:6}}>{[1,2,3,4,5].map(n=>(
             <button key={n} onClick={()=>onRateMix&&onRateMix(m,n)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Leaf filled={false} size={20} color="#8B6D8B"/></button>
@@ -2933,7 +2933,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
                     {m.rating>0&&<div style={{display:"flex",gap:1,marginLeft:"auto"}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=m.rating} size={11} color={theme.accent}/>)}</div>}
                   </div>
                   {m.status==="queued"&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText,marginTop:2}}>queued for rating</div>}
-                  {!(m.rating>0)&&m.status!=="queued"&&<div style={{marginTop:6,padding:"6px 8px",borderRadius:4,background:`${theme.accent}12`,border:`0.5px dashed ${theme.accent}55`}}>
+                  {!(m.rating>0)&&m.status!=="queued"&&canEdit&&<div style={{marginTop:6,padding:"6px 8px",borderRadius:4,background:`${theme.accent}12`,border:`0.5px dashed ${theme.accent}55`}}>
                     <div style={{fontSize:10,color:theme.lightText,marginBottom:4}}>this mix was never rated 🍃</div>
                     <div style={{display:"flex",justifyContent:"center",gap:5}}>{[1,2,3,4,5].map(n=>(
                       <button key={n} onClick={()=>onRateMix&&onRateMix(m,n)} style={{background:"none",border:"none",cursor:"pointer",padding:1}}><Leaf filled={false} size={17} color={theme.accent}/></button>
