@@ -69,6 +69,14 @@ const monthLabel=key=>{
   return Number(y)===new Date().getFullYear()?name:`${name} ${y}`;
 };
 // one-time, idempotent: fill dateIso on records that predate the field
+// how fresh is an insight? derived from the newest record behind it, never hardcoded
+const feedStamp=recs=>{
+  const isos=(recs||[]).map(r=>resolveIso(r)).filter(Boolean).sort();
+  const latest=isos[isos.length-1];
+  if(!latest)return{label:"no data yet",days:null};
+  const days=Math.max(0,Math.floor((Date.now()-new Date(latest+"T00:00:00").getTime())/86400000));
+  return{label:days===0?"today":days===1?"yesterday":days<7?`${days}d ago`:isoToDisplayDate(latest),days};
+};
 const backfillIso=rec=>!rec||rec.dateIso||!rec.date?rec:{...rec,dateIso:isoOf(rec.date,LEGACY_DATA_YEAR)};
 const typeColor=t=>({"Sativa":"#C9A84C","Indica":"#7B6B9E","Hybrid":"#6B7F5A"}[t]||"#8C7E6A");
 const copAgainColor=v=>({"Yes":"#6B7F5A","Maybe":"#C17F4A","No":"#8C7E6A","Never again":"#C15A4A"}[v]||"#8C7E6A");
@@ -800,7 +808,7 @@ function LibraryPage({strains,legacyStrains,onOpenDetail,onPeek}){
 /* ═══════════════════════════════════════════
    STRAIN DETAIL PAGE
    ═══════════════════════════════════════════ */
-function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
+function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
   updateNote,setUpdateNote,onSaveNote,mixMode,setMixMode,
   expNote,setExpNote,onSaveExperience,onHand,strains,
   deleteFromCop,editNoteText,editingItem,setEditingItem,editText,setEditText,confirmDeleteItem,
@@ -1038,7 +1046,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>{setMixMode(null);setMixWith(null);}} style={{flex:1,padding:10,borderRadius:8,fontSize:12,background:"transparent",color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit"}}>cancel</button>
             <button onClick={()=>handleCreateMix(true)} style={{flex:1,padding:10,borderRadius:8,fontSize:12,background:"rgba(139,109,139,0.2)",color:"#C4B0C4",border:"none",cursor:"pointer",fontFamily:"inherit"}}>rate later</button>
-            <button onClick={()=>handleCreateMix(false)} style={{flex:1,padding:10,borderRadius:8,fontSize:12,fontWeight:500,background:"#8B6D8B",color:"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit"}}>save mix</button>
+            <button onClick={()=>{if(mixSess.rating>0)handleCreateMix(false);}} disabled={!(mixSess.rating>0)} style={{flex:1,padding:10,borderRadius:8,fontSize:12,fontWeight:500,background:mixSess.rating>0?"#8B6D8B":"rgba(139,109,139,0.18)",color:mixSess.rating>0?"#E8E0D4":"rgba(232,224,212,0.35)",border:"none",cursor:mixSess.rating>0?"pointer":"default",fontFamily:"inherit"}}>save mix</button>
           </div>
         </>}
       </div>}
@@ -1051,10 +1059,16 @@ function StrainDetailPage({strain,copIdx,setCopIdx,tab:tabProp,setTab,onBack,onS
             <span style={{fontSize:13,fontWeight:500,color:"#C4B0C4"}}>{m.withStrain}</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            {m.status==="reviewed"&&<div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=m.rating} size={12} color="#8B6D8B"/>)}</div>}
+            {m.status==="reviewed"&&(m.rating>0)&&<div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=m.rating} size={12} color="#8B6D8B"/>)}</div>}
             {!locked&&cop?.status==="on-hand"&&<button onClick={()=>deleteFromCop("mixes",m.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#C15A4A",fontFamily:"inherit"}}>{confirmDeleteItem==="mixes-"+m.id?"confirm?":"delete"}</button>}
           </div>
         </div>
+        {!(m.rating>0)&&<div style={{margin:"6px 0 8px",padding:"8px 10px",borderRadius:8,background:"rgba(139,109,139,0.12)",border:"0.5px dashed rgba(139,109,139,0.4)"}}>
+          <p style={{fontSize:11,color:"#C4B0C4",margin:"0 0 6px"}}>this mix was never rated 🍃</p>
+          <div style={{display:"flex",justifyContent:"center",gap:6}}>{[1,2,3,4,5].map(n=>(
+            <button key={n} onClick={()=>onRateMix&&onRateMix(m,n)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Leaf filled={false} size={20} color="#8B6D8B"/></button>
+          ))}</div>
+        </div>}
         {m.combinedTerpenes&&<div style={{display:"flex",flexWrap:"wrap",gap:2}}>{m.combinedTerpenes.map(t=><span key={t} style={{fontSize:9,background:"rgba(139,109,139,0.2)",color:"#C4B0C4",padding:"2px 6px",borderRadius:6}}>{t.toLowerCase()}</span>)}</div>}
         {m.notes&&<p style={{fontSize:11,color:typeTheme.muted,margin:"4px 0 0"}}>{m.notes}</p>}
         <p style={{fontSize:10,color:typeTheme.muted,margin:"3px 0 0"}}>{m.date}</p>
@@ -1172,27 +1186,37 @@ function InsightsPage({strains,onHand,onPeek,dismissed,setDismissed,saved,setSav
   const IS={bg:"#F2EDE4",paper:"#EDE6D9",postBg:"#F8F4ED",darkBg:"#1A1208",border:"#D4C9B4",text:"#2A1F14",muted:"#7A6A52",amber:"#8B5E1A",amberLight:"#C9A84C"};
 
   // Feed posts config
+  // Post ids carry a signature of the insight, so dismissing hides THAT version.
+  // When the underlying numbers move, the id changes and the post returns --
+  // previously the ids were fixed strings, so one dismiss silenced an account forever.
+  const terpStamp=feedStamp(allCops);
+  const mixStamp=feedStamp(uniqueMixes);
+  const outdoorStamp=feedStamp(outdoorCops);
+  const nightStamp=feedStamp(bedtimeCops);
+  const labelStamp=feedStamp(allCops);
+  const sig=(...parts)=>parts.map(x=>x??"-").join("~");
+
   const feedPosts=[
-    {id:"terp",account:"@terp.talk",emoji:"🌿",color:"#8B5E1A",bg:"rgba(139,94,26,0.1)",borderColor:"rgba(139,94,26,0.2)",tagline:"your terpene patterns",
+    {id:sig("terp",topTerp?.[0],totalSessions),account:"@terp.talk",emoji:"🌿",color:"#8B5E1A",bg:"rgba(139,94,26,0.1)",borderColor:"rgba(139,94,26,0.2)",tagline:"your terpene patterns",
       body:topTerp?<p style={{fontSize:12.5,color:IS.text,lineHeight:1.55,margin:"0 0 8px"}}><strong>{topTerp[0].toLowerCase()}</strong> might be your anchor terp. it shows up in <strong>{topTerp[1]} of {totalSessions}</strong> sessions with a <strong>{Math.round((terpCopAgain[topTerp[0]]?.yes||0)/(terpCopAgain[topTerp[0]]?.total||1)*100)}% cop-again rate</strong> — the most consistent signal in your data.</p>:null,
       extra:<div style={{marginTop:4}}>{terpEntries.slice(0,4).map(([terp,count])=>{const avg=terpRatings[terp]?(terpRatings[terp].reduce((a,b)=>a+b,0)/terpRatings[terp].length).toFixed(1):"—";return(<div key={terp} style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}><span style={{fontSize:10,color:IS.muted,width:84,flexShrink:0}}>{terp.toLowerCase()}</span><div style={{flex:1,height:3,background:"#DDD5C4",borderRadius:2}}><div style={{height:3,background:IS.amberLight,borderRadius:2,width:`${(count/maxTerpCount)*100}%`}}/></div><span style={{fontSize:9,color:"#9A8A72",width:52,textAlign:"right"}}>{count}x · {avg}★</span></div>);})}</div>,
-      hasProfile:true,timestamp:"just now"},
-    {id:"mix",account:"@the.mix",emoji:"🎛️",color:"#6B4A6B",bg:"rgba(107,74,107,0.1)",borderColor:"rgba(107,74,107,0.2)",tagline:"your mix activity",
+      hasProfile:true,timestamp:terpStamp.label,isNew:terpStamp.days!==null&&terpStamp.days<=3},
+    {id:sig("mix",uniqueMixes.length,mixAvg),account:"@the.mix",emoji:"🎛️",color:"#6B4A6B",bg:"rgba(107,74,107,0.1)",borderColor:"rgba(107,74,107,0.2)",tagline:"your mix activity",
       body:uniqueMixes.length>0?<p style={{fontSize:12.5,color:IS.text,lineHeight:1.55,margin:"0 0 8px"}}>your <strong>mixes are {mixesBetter?"outrating":"close to"} your solos</strong>. reviewed mixes avg <strong>{mixAvg}</strong> vs solo sessions at <strong>{soloAvg}</strong>{mixesBetter?" — those intentional 50/50s are hitting harder than going it alone.":"."}</p>:<p style={{fontSize:12.5,color:IS.muted,lineHeight:1.55,margin:"0 0 8px"}}>log more mix reviews to unlock mix insights.</p>,
       tags:uniqueMixes.length>0?[{label:`${uniqueMixes.length} reviewed`,color:"#6B4A6B",bg:"rgba(107,74,107,0.1)",border:"rgba(107,74,107,0.2)"},{label:`${mixAvg} mix avg`,color:"#6B4A6B",bg:"rgba(107,74,107,0.1)",border:"rgba(107,74,107,0.2)"},{label:`${soloAvg} solo avg`,color:"#6B4A6B",bg:"rgba(107,74,107,0.1)",border:"rgba(107,74,107,0.2)"}]:null,
-      hasProfile:true,timestamp:"new",isNew:true},
-    {id:"outdoor",account:"@outside.hours",emoji:"🌤️",color:"#3A6B2A",bg:"rgba(58,107,42,0.1)",borderColor:"rgba(58,107,42,0.2)",tagline:"your outdoor sessions",
+      hasProfile:true,timestamp:mixStamp.label,isNew:mixStamp.days!==null&&mixStamp.days<=3},
+    {id:sig("outdoor",outdoorCops.length,outdoorAvg),account:"@outside.hours",emoji:"🌤️",color:"#3A6B2A",bg:"rgba(58,107,42,0.1)",borderColor:"rgba(58,107,42,0.2)",tagline:"your outdoor sessions",
       body:outdoorCops.length>0?<p style={{fontSize:12.5,color:IS.text,lineHeight:1.55,margin:"0 0 8px"}}><strong>outdoor is your {Number(outdoorAvg)>=Number(indoorAvg)?"highest-rated":"lower-rated"} context</strong>. when you're outside, avg rating {Number(outdoorAvg)>Number(indoorAvg)?"jumps to":"sits at"} <strong>{outdoorAvg}</strong> vs <strong>{indoorAvg}</strong> indoor.</p>:<p style={{fontSize:12.5,color:IS.muted,lineHeight:1.55,margin:"0 0 8px"}}>no outdoor sessions logged yet.</p>,
       tags:outdoorCops.length>0?[{label:`outdoor · ${outdoorAvg} avg`,color:"#3A6B2A",bg:"rgba(58,107,42,0.1)",border:"rgba(58,107,42,0.2)"},{label:`indoor · ${indoorAvg} avg`,color:IS.muted,bg:"rgba(42,31,20,0.06)",border:"rgba(42,31,20,0.12)"}]:null,
-      hasProfile:true,timestamp:"Jun 27"},
-    {id:"nightnight",account:"@night.night",emoji:"🌙",color:"#5B4A7A",bg:"rgba(91,74,122,0.1)",borderColor:"rgba(91,74,122,0.2)",tagline:"your bedtime sessions",
+      hasProfile:true,timestamp:outdoorStamp.label,isNew:outdoorStamp.days!==null&&outdoorStamp.days<=3},
+    {id:sig("nightnight",allBedtime.length,wrongCalls.length),account:"@night.night",emoji:"🌙",color:"#5B4A7A",bg:"rgba(91,74,122,0.1)",borderColor:"rgba(91,74,122,0.2)",tagline:"your bedtime sessions",
       body:allBedtime.length>0?(wcTerpSuspect?<p style={{fontSize:12.5,color:IS.text,lineHeight:1.55,margin:"0 0 8px"}}>heads up — <strong>{wcTerpSuspect[0].toLowerCase()} showed up in {wcTerpSuspect[1]} wrong calls</strong>. might be keeping you wired when you're trying to wind down.</p>:<p style={{fontSize:12.5,color:IS.text,lineHeight:1.55,margin:"0 0 8px"}}>you've logged <strong>{allBedtime.length} bedtime session{allBedtime.length!==1?"s":""}</strong> — <strong>{goodCalls.length} good call{goodCalls.length!==1?"s":""}</strong> and <strong>{wrongCalls.length} wrong call{wrongCalls.length!==1?"s":""}</strong>.</p>):<p style={{fontSize:12.5,color:IS.muted,lineHeight:1.55,margin:"0 0 8px"}}>no bedtime sessions yet — toggle 🌙 when logging.</p>,
       tags:allBedtime.length>0?[{label:`${wrongCalls.length} wrong call${wrongCalls.length!==1?"s":""}`,color:"#8B3A2A",bg:"rgba(193,90,74,0.1)",border:"rgba(193,90,74,0.2)"},{label:`${goodCalls.length} good call${goodCalls.length!==1?"s":""}`,color:"#3A6B2A",bg:"rgba(58,107,42,0.1)",border:"rgba(58,107,42,0.2)"}]:null,
-      hasProfile:true,timestamp:"Jun 22"},
-    {id:"label",account:"@the.label",emoji:"🏷️",color:"#8B5E1A",bg:"rgba(139,94,26,0.1)",borderColor:"rgba(139,94,26,0.2)",tagline:"brands · sources · grow types",
+      hasProfile:true,timestamp:nightStamp.label,isNew:nightStamp.days!==null&&nightStamp.days<=3},
+    {id:sig("label",tlAvg,dispAvg),account:"@the.label",emoji:"🏷️",color:"#8B5E1A",bg:"rgba(139,94,26,0.1)",borderColor:"rgba(139,94,26,0.2)",tagline:"brands · sources · grow types",
       body:<p style={{fontSize:12.5,color:IS.text,lineHeight:1.55,margin:"0 0 8px"}}><strong>{Number(tlAvg)>=Number(dispAvg)?"TL is outperforming dispensary":"dispensary is outperforming TL"}</strong> right now — TL avg <strong>{tlAvg}</strong> vs dispensary avg <strong>{dispAvg}</strong>.</p>,
       tags:[{label:`TL · ${tlAvg} avg`,color:"#8B5E1A",bg:"rgba(139,94,26,0.1)",border:"rgba(139,94,26,0.2)"},{label:`dispensary · ${dispAvg} avg`,color:IS.muted,bg:"rgba(42,31,20,0.06)",border:"rgba(42,31,20,0.12)"}],
-      hasProfile:true,timestamp:"Jun 20"},
+      hasProfile:true,timestamp:labelStamp.label,isNew:labelStamp.days!==null&&labelStamp.days<=3},
   ];
 
   // Pinned posts data
@@ -2049,7 +2073,7 @@ function MixReviewSheet({entry,mixSess,setMixSess,onClose,onSave}){
         <textarea defaultValue={mixSess.notes} onBlur={e=>setMixSess({...mixSess,notes:e.target.value})} placeholder="how'd the combo play together..." rows={2} style={{width:"100%",boxSizing:"border-box",background:"rgba(232,224,212,0.04)",borderRadius:8,padding:"10px 14px",fontSize:13,color:"#C4B0C4",border:"0.5px solid rgba(139,109,139,0.2)",fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:14}}/>
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{flex:1,padding:12,borderRadius:10,fontSize:13,background:"transparent",color:"rgba(196,176,196,0.4)",border:"0.5px solid rgba(139,109,139,0.2)",cursor:"pointer",fontFamily:"inherit"}}>cancel</button>
-          <button onClick={onSave} style={{flex:2,padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:"#8B6D8B",color:"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit"}}>save mix review</button>
+          <button onClick={()=>{if(mixSess.rating>0)onSave();}} disabled={!(mixSess.rating>0)} style={{flex:2,padding:12,borderRadius:10,fontSize:13,fontWeight:500,background:mixSess.rating>0?"#8B6D8B":"rgba(139,109,139,0.18)",color:mixSess.rating>0?"#E8E0D4":"rgba(232,224,212,0.35)",border:"none",cursor:mixSess.rating>0?"pointer":"default",fontFamily:"inherit"}}>{mixSess.rating>0?"save mix review":"pick a rating first 🍃"}</button>
         </div>
       </div>
     </div>
@@ -2895,7 +2919,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
                     <div style={{display:"flex",gap:6}}>
                       <span onClick={()=>{setMixMode(false);setMixWith(null);}} style={{flex:1,textAlign:"center",padding:"6px 4px",fontSize:10,color:theme.dimText,cursor:"pointer",border:`0.5px solid ${theme.cardBorder}`,borderRadius:4}}>cancel</span>
                       <span onClick={()=>saveMix(true)} style={{flex:1,textAlign:"center",padding:"6px 4px",fontSize:10,background:`${theme.accent}15`,color:theme.text,cursor:"pointer",borderRadius:4}}>rate later</span>
-                      <span onClick={()=>saveMix(false)} style={{flex:1,textAlign:"center",padding:"6px 4px",fontSize:10,background:`${theme.accent}30`,border:`1px solid ${theme.accent}50`,color:theme.text,cursor:"pointer",borderRadius:4}}>save mix</span>
+                      <span onClick={()=>{if(mixSess.rating>0)saveMix(false);}} title={mixSess.rating>0?undefined:"rate it first, or use rate later"} style={{flex:1,textAlign:"center",padding:"6px 4px",fontSize:10,background:mixSess.rating>0?`${theme.accent}30`:`${theme.accent}10`,border:`1px solid ${theme.accent}${mixSess.rating>0?"50":"25"}`,color:mixSess.rating>0?theme.text:theme.dimText,cursor:mixSess.rating>0?"pointer":"default",borderRadius:4}}>save mix</span>
                     </div>
                   </>)}
                 </div>
@@ -3777,6 +3801,7 @@ function DesktopShell(){
   };
 
   const handleCreateMix=(strain,cop,mixWith,mixSess,rateLater)=>{
+    if(!rateLater&&!(mixSess.rating>0))return;   // a reviewed mix must carry a rating
     const mwCop=mixWith.cops[mixWith.cops.length-1];
     const ct=[...new Set([...(cop.terpenes||[]),...(mwCop?.terpenes||[])])];
     const cTaste=[...new Set([...(cop.session?.tasteTags||[]),...(mwCop?.session?.tasteTags||[])])];
@@ -4068,6 +4093,7 @@ function MobileShell(){
 
   const handleCreateMix=(rateLater)=>{
     if(!detailStrain||!mixWith)return;
+    if(!rateLater&&!(mixSess.rating>0))return;   // a reviewed mix must carry a rating
     const c=detailStrain.cops[detailCopIdx];const mwCop=mixWith.cops[mixWith.cops.length-1];
     const ct=[...new Set([...(c.terpenes||[]),...(mwCop?.terpenes||[])])];
     const cTaste=[...new Set([...(c.session?.tasteTags||[]),...(mwCop?.session?.tasteTags||[])])];
@@ -4085,8 +4111,20 @@ function MobileShell(){
   };
 
   const handleReviewMix=qItem=>{setMixSess({rating:0,sw:0,sf:0,pull:0,vibeTags:[],notes:""});setEditEntry(qItem);setView("reviewMix");};
+  const rateLoggedMix=(mix,rating)=>{
+    if(!(rating>0))return;
+    const sharedId=mix.sharedId||mix.id;
+    setStrains(prev=>{
+      const updated=prev.map(s=>({...s,cops:s.cops.map(c=>({...c,
+        mixes:(c.mixes||[]).map(m=>(m.sharedId||m.id)===sharedId?{...m,rating,status:"reviewed"}:m)}))}));
+      if(detailStrain)setDetailStrain(updated.find(s=>s.id===detailStrain.id)||detailStrain);
+      return updated;
+    });
+    setMixQueue(prev=>prev.filter(q=>(q.sharedId||q.id)!==sharedId));
+  };
+
   const handleSaveMixReview=()=>{
-    if(!editEntry)return;const sharedId=editEntry.sharedId||editEntry.id;
+    if(!editEntry||!(mixSess.rating>0))return;const sharedId=editEntry.sharedId||editEntry.id;
     const reviewUpdate={status:"reviewed",rating:mixSess.rating,spectrums:{sw:mixSess.sw,sf:mixSess.sf},pull:mixSess.pull,bedtime:mixSess.bedtime,vibeTags:[...mixSess.vibeTags],notes:mixSess.notes};
     const updated=strains.map(s=>({...s,cops:s.cops.map(c=>({...c,mixes:(c.mixes||[]).map(m=>m.sharedId===sharedId?{...m,...reviewUpdate}:m)}))}));
     setStrains(updated);setMixQueue(mixQueue.filter(q=>q.id!==editEntry.id));reset("mix");setEditEntry(null);setView(null);
@@ -4108,7 +4146,7 @@ function MobileShell(){
       case "home": return <HomePage strains={strains} onHand={onHand} coppedEntries={coppedEntries} mixQueue={mixQueue} finishedReups={finishedReups} onNavigate={navigate} onLogCop={()=>{setPage("stash");setMenuOpen(false);setView("reupPicker");window.scrollTo(0,0);}} onOpenDetail={openDetail} savedComparisons={savedComparisons} savedTips={savedTips}/>;
       case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveLiteCop={handleSaveLiteCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setCoppedTerpenes={setCoppedTerpenes} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
       case "library": return <LibraryPage strains={strains} legacyStrains={legacyStrains} onOpenDetail={openDetail} onPeek={s=>setPeekStrain(s)}/>;
-      case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} setCopIdx={setDetailCopIdx} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
+      case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} setCopIdx={setDetailCopIdx} onRateMix={rateLoggedMix} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
       case "insights": return <InsightsPage strains={strains} onHand={onHand} onPeek={s=>setPeekStrain(s)} dismissed={insightsDismissed} setDismissed={setInsightsDismissed} saved={insightsSaved} setSaved={setInsightsSaved}/>;
       case "compare": return <ComparePage strains={strains} reups={[...reups,...finishedReups]} savedComparisons={savedComparisons} onSaveComparison={c=>{setSavedComparisons(prev=>[c,...prev]);}} onDeleteComparison={id=>setSavedComparisons(prev=>prev.filter(c=>c.id!==id))} onPeek={s=>setPeekStrain(s)}/>;
       case "recommender": return <RecommenderPage strains={strains} reups={[...reups,...finishedReups]} savedTips={savedTips} onSaveTip={t=>setSavedTips(prev=>[t,...prev])} onDeleteTip={id=>setSavedTips(prev=>prev.filter(t=>t.id!==id))} onPeek={s=>setPeekStrain(s)}/>;
