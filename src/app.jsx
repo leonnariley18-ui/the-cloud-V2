@@ -2625,7 +2625,7 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
 /* ═══════════════════════════════════════════
    STRAIN DETAIL WINDOW (Desktop)
    ═══════════════════════════════════════════ */
-function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab,onClose,strains,onHand,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
+function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab,onClose,strains,onHand,onRateMix,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
   if(!selectedStrain)return null;
 
   const liveStrain=strains.find(s=>s.id===selectedStrain.id)||null;
@@ -2928,8 +2928,17 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
               {(!cop?.mixes||cop.mixes.length===0)&&!mixMode&&<p style={{color:theme.dimText,fontSize:11,fontStyle:"italic"}}>no mixes logged yet</p>}
               {(cop?.mixes||[]).map(m=>(
                 <div key={m.id} style={{padding:"8px 10px",borderRadius:4,marginBottom:6,background:theme.cardBg,border:`0.5px solid ${theme.cardBorder}`}}>
-                  <div style={{fontSize:12,color:theme.text}}>{strain.name} × {m.withStrain}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{fontSize:12,color:theme.text}}>{strain.name} × {m.withStrain}</div>
+                    {m.rating>0&&<div style={{display:"flex",gap:1,marginLeft:"auto"}}>{[1,2,3,4,5].map(n=><Leaf key={n} filled={n<=m.rating} size={11} color={theme.accent}/>)}</div>}
+                  </div>
                   {m.status==="queued"&&<div style={{fontFamily:"'DM Mono',monospace",fontSize:8,color:theme.dimText,marginTop:2}}>queued for rating</div>}
+                  {!(m.rating>0)&&m.status!=="queued"&&<div style={{marginTop:6,padding:"6px 8px",borderRadius:4,background:`${theme.accent}12`,border:`0.5px dashed ${theme.accent}55`}}>
+                    <div style={{fontSize:10,color:theme.lightText,marginBottom:4}}>this mix was never rated 🍃</div>
+                    <div style={{display:"flex",justifyContent:"center",gap:5}}>{[1,2,3,4,5].map(n=>(
+                      <button key={n} onClick={()=>onRateMix&&onRateMix(m,n)} style={{background:"none",border:"none",cursor:"pointer",padding:1}}><Leaf filled={false} size={17} color={theme.accent}/></button>
+                    ))}</div>
+                  </div>}
                   {m.notes&&<div style={{fontSize:11,color:theme.dimText,marginTop:2}}>{m.notes}</div>}
                 </div>
               ))}
@@ -3767,6 +3776,14 @@ function DesktopShell(){
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:[...(c.notes||[]),note]})};}));
   };
 
+  const handleRateLoggedMix=(mix,rating)=>{
+    if(!(rating>0))return;
+    const sharedId=mix.sharedId||mix.id;
+    setStrains(prev=>prev.map(s=>({...s,cops:s.cops.map(c=>({...c,
+      mixes:(c.mixes||[]).map(m=>(m.sharedId||m.id)===sharedId?{...m,rating,status:"reviewed"}:m)}))})));
+    setMixQueue(prev=>prev.filter(q=>(q.sharedId||q.id)!==sharedId));
+  };
+
   const handleEditNote=(strainId,copId,noteId,newText)=>{
     if(!newText.trim())return;
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:(c.notes||[]).map(n=>n.id!==noteId?n:{...n,text:newText.trim()})})};}));
@@ -3869,6 +3886,7 @@ function DesktopShell(){
         onHand={onHand}
         onAddNote={handleAddNote}
         onEditNote={handleEditNote}
+        onRateMix={handleRateLoggedMix}
         onDeleteNote={handleDeleteNote}
         onAddExperience={handleAddExperience}
         onFinishCop={handleFinishCop}
