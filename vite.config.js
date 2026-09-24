@@ -4,4 +4,8 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   base: "/the-cloud-V2/",
+  build: {
+    outDir: "docs",
+    emptyOutDir: true,
+  },
 });
