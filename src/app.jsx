@@ -77,6 +77,22 @@ const feedStamp=recs=>{
   const days=Math.max(0,Math.floor((Date.now()-new Date(latest+"T00:00:00").getTime())/86400000));
   return{label:days===0?"today":days===1?"yesterday":days<7?`${days}d ago`:isoToDisplayDate(latest),days};
 };
+// notes/experiences/mixes can be logged after the fact; an absent iso means "now"
+const datedStamp=iso=>iso?{date:isoToDisplayDate(iso)||today(),dateIso:iso}:stamp();
+const WhenField=({iso,onChange,dark})=>(
+  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+    <span style={{fontSize:11,color:dark?"rgba(255,255,255,0.45)":"rgba(240,235,225,0.5)",whiteSpace:"nowrap"}}>when?</span>
+    <input type="date" value={iso||todayIso()} max={todayIso()} onChange={e=>onChange(e.target.value)}
+      style={{flex:1,boxSizing:"border-box",padding:"6px 8px",borderRadius:6,fontSize:12,fontFamily:"inherit",
+        background:dark?"rgba(0,0,0,0.25)":"rgba(240,235,225,0.06)",color:dark?"rgba(255,255,255,0.75)":"#F0EBE1",
+        border:`0.5px solid ${dark?"rgba(255,255,255,0.12)":"rgba(240,235,225,0.15)"}`,outline:"none",colorScheme:"dark"}}/>
+  </div>
+);
+const daysSinceEntry=rec=>{
+  const i=resolveIso(rec); if(!i)return null;
+  const d=new Date(i+"T00:00:00"); if(isNaN(d.getTime()))return null;
+  return Math.max(0,Math.floor((Date.now()-d.getTime())/86400000));
+};
 const backfillIso=rec=>!rec||rec.dateIso||!rec.date?rec:{...rec,dateIso:isoOf(rec.date,LEGACY_DATA_YEAR)};
 const typeColor=t=>({"Sativa":"#C9A84C","Indica":"#7B6B9E","Hybrid":"#6B7F5A"}[t]||"#8C7E6A");
 const copAgainColor=v=>({"Yes":"#6B7F5A","Maybe":"#C17F4A","No":"#8C7E6A","Never again":"#C15A4A"}[v]||"#8C7E6A");
@@ -108,6 +124,23 @@ function makeLiteCop(cop,reupId){
 // A lite re-up is a backfill, so it takes the date of its earliest cop rather
 // than the day it happened to be created. dateIso is kept only for comparison --
 // the visible `date` stays the app's "MMM D" display string.
+// Adapts a coppedEntry ("ready to try") into the shape makeLiteCop expects, keeping the
+// ORIGINAL cop date rather than stamping today -- the point is that time has passed.
+function coppedEntryAsCopForm(entry){
+  return{name:entry.strainName,existingStrainId:entry.strainId,type:entry.type,lean:entry.lean,
+    source:entry.source,container:entry.container,brand:entry.brand,growType:entry.growType,
+    terpenes:entry.terpenes||[],notes:entry.firstNotes,intent:entry.intent,amount:entry.amount,
+    parent1:entry.parent1,parent2:entry.parent2,unknownLineage:false,
+    copDate:entry.dateIso||inferIso(entry.date)||null};
+}
+// Moves a pending id to settled on its re-up -- the same move handleSaveSession makes.
+function settleCoppedId(reups,reupId,coppedId,copId){
+  if(!reupId)return reups;
+  return reups.map(r=>r.id!==reupId?r:{...r,
+    coppedIds:(r.coppedIds||[]).filter(id=>id!==coppedId),
+    copIds:[...(r.copIds||[]),copId]});
+}
+
 function addLiteCopToReup(reups,reupId,copId,copDate,copIso){
   return reups.map(r=>{
     if(r.id!==reupId)return r;
@@ -412,7 +445,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   finishingCop,finishCopAgain,setFinishCopAgain,
   handleSaveCop,handleSaveLiteCop,handleSaveSession,handleMarkDone,handleConfirmDone,
   handleReviewMix,handleSaveMixReview,
-  setCoppedIntent,setCoppedAmount,setCoppedTerpenes,setFinishingCop,
+  setCoppedIntent,setCoppedAmount,setCoppedTerpenes,convertToLite,onDeleteCopped,setFinishingCop,
   openDetail,openDetailTab,reset,showSugg,setShowSugg,legacyStrains,handleAddReup,handleDeleteReup,confirmDeleteItem,
   handleInlineNote,handleInlineExperience,onAddMixQueue}){
 
@@ -606,9 +639,14 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
       {e.terpenes?.length>0&&<div onClick={()=>setTerpFixId(e.id)} title="tap to edit terpenes" style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6,cursor:"pointer"}}>{e.terpenes.map(t=><span key={t} style={{fontSize:10,background:"rgba(107,127,90,0.2)",color:P.sage,padding:"2px 6px",borderRadius:8}}>{t.toLowerCase()}</span>)}</div>}
       {!e.intent&&<div style={{display:"flex",gap:4,marginBottom:8}}>{["asleep","awake","adventure"].map(i=><button key={i} onClick={()=>setCoppedIntent(e.id,i)} style={{fontSize:10,padding:"3px 9px",borderRadius:8,border:"0.5px solid rgba(240,235,225,0.15)",background:"rgba(240,235,225,0.06)",color:"rgba(240,235,225,0.5)",cursor:"pointer",fontFamily:"inherit"}}>{i==="asleep"?"🌙":i==="awake"?"☀️":"🏕️"} {i}</button>)}</div>}
       {!e.amount&&<div style={{display:"flex",gap:4,marginBottom:8}}>{["8th","quarter","half","oz"].map(a=><button key={a} onClick={()=>setCoppedAmount(e.id,a)} style={{fontSize:10,padding:"3px 9px",borderRadius:8,border:"0.5px solid rgba(240,235,225,0.15)",background:"rgba(240,235,225,0.06)",color:"rgba(240,235,225,0.5)",cursor:"pointer",fontFamily:"inherit"}}>{a}</button>)}</div>}
-      {(()=>{const ok=(e.terpenes?.length||0)>=MIN_TERPS;return(
+      {(()=>{const ok=(e.terpenes?.length||0)>=MIN_TERPS;const age=daysSinceEntry(e);return(<>
         <button onClick={()=>{if(ok){setEditEntry(e);setView("session");}}} disabled={!ok} style={{width:"100%",padding:10,borderRadius:8,fontSize:13,fontWeight:500,background:ok?P.terracotta:"rgba(240,235,225,0.08)",color:ok?P.cream:"rgba(240,235,225,0.3)",border:"none",cursor:ok?"pointer":"default",fontFamily:"inherit"}}>log first session</button>
-      );})()}
+        <div style={{display:"flex",gap:6,marginTop:6}}>
+          <button onClick={()=>ok&&convertToLite(e)} disabled={!ok} title={ok?undefined:`needs ${MIN_TERPS} terpenes first`} style={{flex:2,padding:9,borderRadius:8,fontSize:12,background:"transparent",color:ok?"rgba(240,235,225,0.6)":"rgba(240,235,225,0.25)",border:"0.5px solid rgba(240,235,225,0.18)",cursor:ok?"pointer":"default",fontFamily:"inherit"}}>skip the sesh — log as lite 🌬️</button>
+          <button onClick={()=>onDeleteCopped(e)} style={{flex:1,padding:9,borderRadius:8,fontSize:12,background:"transparent",color:"#C15A4A",border:"0.5px solid rgba(193,90,74,0.3)",cursor:"pointer",fontFamily:"inherit"}}>{confirmDeleteItem==="copped-"+e.id?"confirm?":"delete"}</button>
+        </div>
+        {age!==null&&age>=14&&<p style={{fontSize:10,color:"rgba(240,235,225,0.35)",margin:"6px 0 0",textAlign:"center"}}>waiting {age} days — the sesh details may be hard to recall by now</p>}
+      </>);})()}
     </SolidCard>)}<div style={{margin:"16px 0",borderTop:"0.5px solid rgba(240,235,225,0.08)"}}/></>}
 
     {/* On hand */}
@@ -634,7 +672,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
         </div>
         <div style={{display:"flex",gap:6}}>
           <button onClick={closeInline} style={{flex:1,padding:8,borderRadius:8,fontSize:12,background:"transparent",color:"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.1)",cursor:"pointer",fontFamily:"inherit"}}>cancel</button>
-          <button onClick={()=>{if(inlineMixWith&&s){const withEntry=onHand.find(x=>x.strainName===inlineMixWith);if(withEntry){const me={id:Date.now(),primaryStrain:s.name,primaryStrainId:s.id,primaryType:s.cops[s.cops.length-1]?.type,withStrain:inlineMixWith,withStrainId:withEntry.strainId,withCopId:withEntry.copId,withType:withEntry.type,combinedTerpenes:[...new Set([...(s.cops[s.cops.length-1]?.terpenes||[]),...(withEntry.terpenes||[])])],combinedTaste:[],sharedId:Date.now(),status:"pending",date:today()};onAddMixQueue(s.id,o.copId,me);}closeInline();}}} style={{flex:2,padding:8,borderRadius:8,fontSize:12,fontWeight:500,background:P.plum,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit",opacity:inlineMixWith?1:0.4}}>add to mix queue</button>
+          <button onClick={()=>{if(inlineMixWith&&s){const withEntry=onHand.find(x=>x.strainName===inlineMixWith);if(withEntry){const me={id:Date.now(),primaryStrain:s.name,primaryStrainId:s.id,primaryType:s.cops[s.cops.length-1]?.type,withStrain:inlineMixWith,withStrainId:withEntry.strainId,withCopId:withEntry.copId,withType:withEntry.type,combinedTerpenes:[...new Set([...(s.cops[s.cops.length-1]?.terpenes||[]),...(withEntry.terpenes||[])])],combinedTaste:[],sharedId:Date.now(),status:"pending",...datedStamp(mixSess.whenIso)};onAddMixQueue(s.id,o.copId,me);}closeInline();}}} style={{flex:2,padding:8,borderRadius:8,fontSize:12,fontWeight:500,background:P.plum,color:P.cream,border:"none",cursor:"pointer",fontFamily:"inherit",opacity:inlineMixWith?1:0.4}}>add to mix queue</button>
         </div>
       </div>}
       {finishingCop?.copId===o.copId&&<div style={{marginTop:10,paddingTop:10,borderTop:"0.5px solid rgba(240,235,225,0.1)"}}>
@@ -808,7 +846,7 @@ function LibraryPage({strains,legacyStrains,onOpenDetail,onPeek}){
 /* ═══════════════════════════════════════════
    STRAIN DETAIL PAGE
    ═══════════════════════════════════════════ */
-function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
+function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,onUnfinish,tab:tabProp,setTab,onBack,onStar,onUpdateRating,onUpdateParents,onMarkDone,
   updateNote,setUpdateNote,onSaveNote,mixMode,setMixMode,
   expNote,setExpNote,onSaveExperience,onHand,strains,
   deleteFromCop,editNoteText,editingItem,setEditingItem,editText,setEditText,confirmDeleteItem,
@@ -838,6 +876,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,
   const hasSetting=s?.setting!=null||s?.bedtime!=null;
   const hasFirstSesh=!!s&&(hasSpectrums||hasSetting||!!s.smokesLike||(s.tasteTags||[]).length>0||(s.vibeTags||[]).length>0||!!s.notes);
   const locked=strain.cops.some(c=>c.session?.copAgain==="Never again");
+  const[noteWhen,setNoteWhen]=useState(todayIso());
   // a tab is hidden when it's empty AND there's nothing you could add to it
   const canAddToCop=!locked&&cop?.status==="on-hand";
   const tabHasContent=t=>t==="notes"?(cop?.notes||[]).length>0:t==="experiences"?(cop?.experiences||[]).length>0:t==="mixes"?(cop?.mixes||[]).length>0:true;
@@ -950,6 +989,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,
 
 
       {/* Mark finished with cop-again confirmation */}
+      {!locked&&cop?.status==="done"&&<button onClick={()=>onUnfinish&&onUnfinish(strain.id,cop.id)} style={{width:"100%",padding:10,borderRadius:8,fontSize:12,background:"transparent",color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit",marginTop:10}}>put back on hand ↩</button>}
       {!locked&&cop?.status==="on-hand"&&!finishingCop&&<button onClick={()=>onMarkDone({strainName:strain.name,strainId:strain.id,copId:cop.id,type:cop.type,terpenes:cop.terpenes})} style={{width:"100%",padding:10,borderRadius:8,fontSize:12,background:"transparent",color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit",marginTop:10}}>mark finished</button>}
       {finishingCop?.copId===cop?.id&&<div style={{background:typeTheme.cardBg,borderRadius:12,padding:16,border:`0.5px solid ${typeTheme.cardBorder}`,marginTop:12}}>
         <p style={{fontSize:12,fontWeight:500,color:typeTheme.text,margin:"0 0 8px"}}>would you still cop again?</p>
@@ -981,11 +1021,12 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,
 
     {/* ── NOTES TAB ── */}
     {tab==="notes"&&<div>
-      {!locked&&cop?.status==="on-hand"&&!mixMode&&<button onClick={()=>{setMixMode("note");setUpdateNote("");}} style={{width:"100%",padding:10,borderRadius:8,fontSize:12,background:typeTheme.cardBg,color:typeTheme.text,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>+ add note</button>}
+      {!locked&&cop?.status==="on-hand"&&!mixMode&&<button onClick={()=>{setMixMode("note");setUpdateNote("");setNoteWhen(todayIso());}} style={{width:"100%",padding:10,borderRadius:8,fontSize:12,background:typeTheme.cardBg,color:typeTheme.text,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>+ add note</button>}
       {mixMode==="note"&&tab==="notes"&&<div style={{background:typeTheme.cardBg,borderRadius:12,padding:16,border:`0.5px solid ${typeTheme.cardBorder}`,marginBottom:12}}>
+        <WhenField iso={noteWhen} onChange={setNoteWhen}/>
         <p style={{fontSize:12,fontWeight:500,color:typeTheme.text,margin:"0 0 10px"}}>add a note</p>
         <textarea defaultValue={updateNote} onBlur={e=>setUpdateNote(e.target.value)} placeholder="what\u2019s on your mind..." rows={3} style={{width:"100%",boxSizing:"border-box",background:"transparent",borderRadius:8,padding:"10px 14px",fontSize:14,color:typeTheme.text,border:`0.5px solid ${typeTheme.cardBorder}`,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:12}}/>
-        <div style={{display:"flex",gap:8}}><button onClick={()=>setMixMode(null)} style={{flex:1,padding:10,borderRadius:8,fontSize:12,background:"transparent",color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit"}}>cancel</button><button onClick={onSaveNote} style={{flex:1,padding:10,borderRadius:8,fontSize:12,fontWeight:500,background:typeTheme.accent,color:cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit"}}>save note</button></div>
+        <div style={{display:"flex",gap:8}}><button onClick={()=>setMixMode(null)} style={{flex:1,padding:10,borderRadius:8,fontSize:12,background:"transparent",color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit"}}>cancel</button><button onClick={()=>onSaveNote(noteWhen)} style={{flex:1,padding:10,borderRadius:8,fontSize:12,fontWeight:500,background:typeTheme.accent,color:cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit"}}>save note</button></div>
       </div>}
       {(cop?.notes||[]).length===0&&!mixMode&&<p style={{fontSize:13,color:typeTheme.muted,fontStyle:"italic"}}>no notes yet</p>}
       {(cop?.notes||[]).map((n,ni)=>{const isFirstImpression=usesLegacyIntroNote(cop)&&ni===0;return(<div key={n.id} style={{background:typeTheme.cardBg,borderRadius:10,padding:12,marginBottom:6,border:`0.5px solid ${typeTheme.cardBorder}`,borderLeft:`3px solid ${isFirstImpression?typeTheme.muted:typeTheme.accent}`}}>
@@ -1008,6 +1049,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,
       {!locked&&cop?.status==="on-hand"&&!mixMode&&<button onClick={()=>setMixMode("experience")} style={{width:"100%",padding:10,borderRadius:8,fontSize:12,background:typeTheme.accent,color:cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>+ log experience</button>}
       {mixMode==="experience"&&tab==="experiences"&&<div style={{background:typeTheme.cardBg,borderRadius:12,padding:16,border:`0.5px solid ${typeTheme.cardBorder}`,marginBottom:12}}>
         <p style={{fontSize:12,fontWeight:500,color:typeTheme.text,margin:"0 0 12px"}}>log an experience</p>
+        <WhenField iso={expNote.whenIso||todayIso()} onChange={v=>setExpNote({...expNote,whenIso:v})}/>
         <div style={{marginBottom:12}}><ToggleGroup options={["indoor","outdoor"]} value={expNote.setting} onChange={v=>setExpNote({...expNote,setting:v,bedtime:v==="outdoor"?false:expNote.bedtime})} color={typeTheme.accent}/>
         {expNote.setting==="indoor"&&<button onClick={()=>setExpNote({...expNote,bedtime:!expNote.bedtime})} style={{display:"flex",alignItems:"center",gap:6,marginTop:8,padding:"6px 12px",borderRadius:8,fontSize:12,fontFamily:"inherit",cursor:"pointer",background:expNote.bedtime?"#2C2C4A":"transparent",color:expNote.bedtime?"#C9B8F0":typeTheme.muted,border:expNote.bedtime?"none":`0.5px solid ${typeTheme.cardBorder}`}}>bedtime{expNote.bedtime&&" \u2713"}</button>}</div>
         <textarea defaultValue={expNote.note} onBlur={e=>setExpNote({...expNote,note:e.target.value})} placeholder="what was different this time..." rows={3} style={{width:"100%",boxSizing:"border-box",background:"transparent",borderRadius:8,padding:"10px 14px",fontSize:14,color:typeTheme.text,border:`0.5px solid ${typeTheme.cardBorder}`,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:12}}/>
@@ -1018,6 +1060,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,
       {(cop?.experiences||[]).map(exp=><div key={exp.id} style={{background:typeTheme.cardBg,borderRadius:10,padding:12,marginBottom:6,border:`0.5px solid ${typeTheme.cardBorder}`}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
           <span style={{fontSize:10,color:typeTheme.muted}}>{exp.date}</span>
+          {!locked&&cop?.status==="on-hand"&&<button onClick={()=>deleteFromCop("experiences",exp.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:"#C15A4A",fontFamily:"inherit",marginLeft:"auto",order:9}}>{confirmDeleteItem==="experiences-"+exp.id?"confirm?":"delete"}</button>}
           <span style={{fontSize:9,padding:"2px 6px",borderRadius:6,background:exp.setting==="outdoor"?"rgba(91,138,114,0.2)":exp.bedtime?"rgba(44,44,74,0.5)":typeTheme.cardBg,color:exp.setting==="outdoor"?"#6B8F5A":exp.bedtime?"#C9B8F0":typeTheme.muted}}>{exp.setting==="outdoor"?"outdoor":exp.bedtime?"bedtime":"indoor"}</span>
         </div>
         {exp.note&&<p style={{fontSize:12,color:typeTheme.text,margin:"0 0 4px",lineHeight:1.4}}>{exp.note}</p>}
@@ -1032,6 +1075,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,tab:tabProp,setTab,
       {!locked&&cop?.status==="on-hand"&&!mixMode&&<button onClick={()=>setMixMode("mix")} style={{width:"100%",padding:10,borderRadius:8,fontSize:12,background:"#8B6D8B",color:"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>+ log a mix</button>}
       {mixMode==="mix"&&<div style={{background:"rgba(139,109,139,0.08)",borderRadius:12,padding:16,border:"0.5px solid rgba(139,109,139,0.15)",marginBottom:16}}>
         <p style={{fontSize:12,fontWeight:500,color:"#C4B0C4",margin:"0 0 10px"}}>mix {strain.name} with:</p>
+        <WhenField iso={mixSess.whenIso||todayIso()} onChange={v=>setMixSess({...mixSess,whenIso:v})}/>
         <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>
           {onHand.filter(o=>o.strainId!==strain.id).map(o=><button key={o.copId} onClick={()=>setMixWith(strains.find(s=>s.id===o.strainId))} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,cursor:"pointer",fontFamily:"inherit",background:mixWith?.id===o.strainId?"#8B6D8B":"transparent",color:mixWith?.id===o.strainId?"#E8E0D4":"#C4B0C4",border:mixWith?.id===o.strainId?"none":"0.5px solid rgba(139,109,139,0.15)",textAlign:"left"}}><div style={{width:3,height:16,borderRadius:1,background:typeColor(o.type)}}/>{o.strainName}</button>)}
           {onHand.filter(o=>o.strainId!==strain.id).length===0&&<p style={{fontSize:11,color:typeTheme.muted}}>no other on-hand strains to mix with</p>}
@@ -2625,7 +2669,7 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
 /* ═══════════════════════════════════════════
    STRAIN DETAIL WINDOW (Desktop)
    ═══════════════════════════════════════════ */
-function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab,onClose,strains,onHand,onRateMix,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
+function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab,onClose,strains,onHand,onRateMix,onUnfinish,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
   if(!selectedStrain)return null;
 
   const liveStrain=strains.find(s=>s.id===selectedStrain.id)||null;
@@ -2647,6 +2691,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
 
   const[addingNote,setAddingNote]=useState(false);
   const[noteDraft,setNoteDraft]=useState("");
+  const[noteWhen,setNoteWhen]=useState(todayIso());
   const[editingNoteId,setEditingNoteId]=useState(null);
   const[editNoteDraft,setEditNoteDraft]=useState("");
   const[confirmDeleteNoteId,setConfirmDeleteNoteId]=useState(null);
@@ -2660,7 +2705,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
 
   const saveNote=()=>{
     if(!isReal||!noteDraft.trim())return;
-    onAddNote(strain.id,cop.id,noteDraft);
+    onAddNote(strain.id,cop.id,noteDraft,noteWhen);
     setNoteDraft("");setAddingNote(false);
   };
   const saveEditNote=noteId=>{
@@ -2676,7 +2721,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
   const saveExperience=()=>{
     if(!isReal)return;
     if(!expDraft.text.trim()&&expDraft.vibeTags.length===0)return;
-    onAddExperience(strain.id,cop.id,expDraft.text,expDraft.setting,expDraft.bedtime,expDraft.vibeTags);
+    onAddExperience(strain.id,cop.id,expDraft.text,expDraft.setting,expDraft.bedtime,expDraft.vibeTags,expDraft.whenIso);
     setExpDraft({text:"",setting:"indoor",bedtime:false,vibeTags:[]});setAddingExp(false);
   };
   const confirmFinish=()=>{
@@ -2796,6 +2841,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
               <div style={{display:"flex",gap:6,paddingTop:10,marginTop:10,borderTop:`0.5px solid ${theme.accent}30`}}>
                 <button onClick={()=>{setDetailTab("notes");setAddingNote(true);}} disabled={!isReal} style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:isReal?"pointer":"default",textAlign:"center",borderRadius:0,background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,opacity:isReal?1:0.4}}>+ NOTE</button>
                 <button onClick={()=>{setDetailTab("experiences");setAddingExp(true);}} disabled={!isReal} style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:isReal?"pointer":"default",textAlign:"center",borderRadius:0,background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,opacity:isReal?1:0.4}}>+ EXPERIENCE</button>
+                {isReal&&cop?.status==="done"&&cop?.session?.copAgain!=="Never again"&&<button onClick={()=>onUnfinish&&onUnfinish(strain.id,cop.id)} style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:"pointer",textAlign:"center",borderRadius:0,background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text}}>↩ BACK ON HAND</button>}
                 <button onClick={()=>setFinishing(true)} disabled={!canEdit} style={{flex:1,padding:"8px",fontSize:9,fontFamily:"'DM Mono',monospace",cursor:canEdit?"pointer":"default",textAlign:"center",borderRadius:0,background:"rgba(91,138,114,0.1)",border:"1px solid rgba(91,138,114,0.25)",color:"rgba(91,138,114,0.7)",opacity:canEdit?1:0.4}}>{cop?.status==="done"?"FINISHED":"FINISHED"}</button>
               </div>
               {!isReal&&<p style={{fontSize:10,color:theme.dimText,marginTop:8,fontStyle:"italic"}}>finish reviewing this cop to add notes or experiences</p>}
@@ -2820,9 +2866,10 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
           {detailTab==="notes"&&(
             <div>
               <div style={{fontSize:8,fontWeight:500,color:theme.dimText,letterSpacing:0.5,textTransform:"uppercase",margin:"0 0 12px",borderLeft:`2px solid ${theme.accent}`,background:`linear-gradient(90deg,${theme.accent}30,transparent)`,padding:"4px 8px"}}>NOTES</div>
-              {isReal&&!addingNote&&<button onClick={()=>setAddingNote(true)} style={{width:"100%",padding:8,fontSize:10,fontFamily:"'DM Mono',monospace",cursor:"pointer",background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,marginBottom:12}}>+ add note</button>}
+              {isReal&&!addingNote&&<button onClick={()=>{setAddingNote(true);setNoteWhen(todayIso());}} style={{width:"100%",padding:8,fontSize:10,fontFamily:"'DM Mono',monospace",cursor:"pointer",background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,marginBottom:12}}>+ add note</button>}
               {addingNote&&(
                 <div>
+                  <WhenField iso={noteWhen} onChange={setNoteWhen} dark/>
                   <textarea value={noteDraft} onChange={e=>setNoteDraft(e.target.value)} placeholder="write your note..." rows={3} style={{width:"100%",boxSizing:"border-box",background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,fontSize:12,color:theme.text,fontFamily:"inherit",outline:"none",resize:"vertical",marginBottom:8}}/>
                   <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginBottom:12}}>
                     <span onClick={()=>{setAddingNote(false);setNoteDraft("");}} style={{padding:"6px 16px",fontSize:11,color:theme.dimText,cursor:"pointer"}}>cancel</span>
@@ -2866,6 +2913,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
               {isReal&&!addingExp&&<button onClick={()=>setAddingExp(true)} style={{width:"100%",padding:8,fontSize:10,fontFamily:"'DM Mono',monospace",cursor:"pointer",background:theme.buttonBg,border:`1px solid ${theme.buttonBorder}`,color:theme.text,marginBottom:12}}>+ log experience</button>}
               {addingExp&&(
                 <div style={{background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,marginBottom:12}}>
+                  <WhenField iso={expDraft.whenIso||todayIso()} onChange={v=>setExpDraft({...expDraft,whenIso:v})} dark/>
                   <div style={{display:"flex",gap:5,marginBottom:8}}>
                     {["indoor","outdoor"].map(s=>(
                       <span key={s} onClick={()=>setExpDraft({...expDraft,setting:s,bedtime:s==="outdoor"?false:expDraft.bedtime})} style={{padding:"5px 12px",borderRadius:16,fontSize:10,cursor:"pointer",background:expDraft.setting===s?`${theme.accent}30`:"transparent",color:expDraft.setting===s?theme.text:theme.dimText,border:expDraft.setting===s?`0.5px solid ${theme.accent}60`:`0.5px solid ${theme.accent}20`}}>{s}</span>
@@ -2903,6 +2951,7 @@ function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab
               {mixMode&&(
                 <div style={{background:theme.cardBg,border:`1px solid ${theme.cardBorder}`,borderRadius:4,padding:10,marginBottom:12}}>
                   <div style={{fontSize:11,color:theme.text,marginBottom:8}}>mix {strain.name} with:</div>
+                  <WhenField iso={mixSess.whenIso||todayIso()} onChange={v=>setMixSess({...mixSess,whenIso:v})} dark/>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:10}}>
                     {onHand.filter(o=>o.strainId!==strain.id).map(o=>(
                       <span key={o.copId} onClick={()=>setMixWith(strains.find(s=>s.id===o.strainId))} style={{padding:"6px 10px",borderRadius:4,fontSize:11,cursor:"pointer",background:mixWith?.id===o.strainId?`${theme.accent}30`:"transparent",color:mixWith?.id===o.strainId?theme.text:theme.dimText,border:mixWith?.id===o.strainId?`0.5px solid ${theme.accent}60`:`0.5px solid ${theme.cardBorder}`}}>{o.strainName}</span>
@@ -3770,9 +3819,9 @@ function DesktopShell(){
     setDetailTab("overview");
   };
 
-  const handleAddNote=(strainId,copId,text)=>{
+  const handleAddNote=(strainId,copId,text,whenIso)=>{
     if(!text.trim())return;
-    const note={id:Date.now(),date:today(),text:text.trim()};
+    const note={id:Date.now(),...datedStamp(whenIso),text:text.trim()};
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:[...(c.notes||[]),note]})};}));
   };
 
@@ -3793,10 +3842,27 @@ function DesktopShell(){
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:(c.notes||[]).filter(n=>n.id!==noteId)})};}));
   };
 
-  const handleAddExperience=(strainId,copId,text,setting,bedtime,vibeTags)=>{
+  const handleAddExperience=(strainId,copId,text,setting,bedtime,vibeTags,whenIso)=>{
     if(!text.trim()&&(!vibeTags||vibeTags.length===0))return;
-    const exp={id:Date.now(),date:today(),setting,bedtime,note:text.trim(),vibeTags:[...vibeTags],mixedWith:null};
+    const exp={id:Date.now(),...datedStamp(whenIso),setting,bedtime,note:text.trim(),vibeTags:[...vibeTags],mixedWith:null};
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,experiences:[...(c.experiences||[]),exp]})};}));
+  };
+
+  const handleUnfinishCop=(strainId,copId)=>{
+    const strain=strains.find(s=>s.id===strainId);
+    const cop=strain?.cops.find(c=>c.id===copId);
+    if(!cop)return;
+    setStrains(strains.map(s=>s.id!==strainId?s:{...s,cops:s.cops.map(c=>{
+      if(c.id!==copId)return c;const{finishedDate,...rest}=c;return{...rest,status:"on-hand"};})}));
+    setOnHand(prev=>prev.some(o=>o.copId===copId)?prev:[{strainName:strain.name,strainId,copId,
+      type:cop.type,terpenes:[...(cop.terpenes||[])],date:cop.date,dateIso:cop.dateIso,
+      rating:cop.session?.rating??null,...(cop.lite?{lite:true}:{})},...prev]);
+    const closed=finishedReups.find(r=>(r.copIds||[]).includes(copId));
+    if(closed){
+      const{closed:_c,closedDate:_d,strainNames:_s,...reopened}=closed;
+      setFinishedReups(finishedReups.filter(r=>r.id!==closed.id));
+      setReups(prev=>[...prev,{...reopened,closed:false}]);
+    }
   };
 
   const handleFinishCop=(item,copAgainChoice)=>{
@@ -3823,7 +3889,7 @@ function DesktopShell(){
     const ct=[...new Set([...(cop.terpenes||[]),...(mwCop?.terpenes||[])])];
     const cTaste=[...new Set([...(cop.session?.tasteTags||[]),...(mwCop?.session?.tasteTags||[])])];
     const mixSharedId=Date.now();
-    const me={id:mixSharedId,sharedId:mixSharedId,withStrain:mixWith.name,withStrainId:mixWith.id,primaryStrain:strain.name,primaryStrainId:strain.id,primaryType:cop.type,withType:mwCop?.type,status:rateLater?"queued":"reviewed",rating:mixSess.rating,spectrums:{sw:mixSess.sw,sf:mixSess.sf},pull:mixSess.pull,bedtime:mixSess.bedtime,vibeTags:[...mixSess.vibeTags],combinedTerpenes:ct,combinedTaste:cTaste,notes:mixSess.notes,date:today()};
+    const me={id:mixSharedId,sharedId:mixSharedId,withStrain:mixWith.name,withStrainId:mixWith.id,primaryStrain:strain.name,primaryStrainId:strain.id,primaryType:cop.type,withType:mwCop?.type,status:rateLater?"queued":"reviewed",rating:mixSess.rating,spectrums:{sw:mixSess.sw,sf:mixSess.sf},pull:mixSess.pull,bedtime:mixSess.bedtime,vibeTags:[...mixSess.vibeTags],combinedTerpenes:ct,combinedTaste:cTaste,notes:mixSess.notes,...datedStamp(mixSess.whenIso)};
     const mirror={...me,id:mixSharedId+1,withStrain:strain.name,withStrainId:strain.id,primaryStrain:mixWith.name,primaryStrainId:mixWith.id,primaryType:mwCop?.type,withType:cop.type};
     if(rateLater)setMixQueue(prev=>[{...me,copId:cop.id},...prev]);
     setStrains(prev=>prev.map(s=>{
@@ -3887,6 +3953,7 @@ function DesktopShell(){
         onAddNote={handleAddNote}
         onEditNote={handleEditNote}
         onRateMix={handleRateLoggedMix}
+        onUnfinish={handleUnfinishCop}
         onDeleteNote={handleDeleteNote}
         onAddExperience={handleAddExperience}
         onFinishCop={handleFinishCop}
@@ -4004,7 +4071,7 @@ function MobileShell(){
     if(!editEntry)return;
     const copId=Date.now();const strainId=editEntry.strainId||copId+1;
     const newCop={id:copId,type:editEntry.type,lean:editEntry.lean,source:editEntry.source,container:editEntry.container,brand:editEntry.brand||"",growType:editEntry.growType||"",terpenes:[...editEntry.terpenes],date:editEntry.date,dateIso:resolveIso(editEntry),firstNotes:editEntry.firstNotes,status:session.copAgain==="Never again"?"done":"on-hand",intent:editEntry.intent||null,amount:editEntry.amount||null,reupId:editEntry.reupId||null,
-      session:{rating:session.rating,smokesLike:session.smokesLike,smokesLikeLean:session.smokesLikeLean,setting:session.setting,bedtime:session.bedtime,spectrums:{sw:session.sw,sf:session.sf},pull:session.pull,tasteTags:[...session.tasteTags],vibeTags:[...session.vibeTags],notes:session.notes,copAgain:session.copAgain,date:today()},
+      session:{rating:session.rating,smokesLike:session.smokesLike,smokesLikeLean:session.smokesLikeLean,setting:session.setting,bedtime:session.bedtime,spectrums:{sw:session.sw,sf:session.sf},pull:session.pull,tasteTags:[...session.tasteTags],vibeTags:[...session.vibeTags],notes:session.notes,copAgain:session.copAgain,...datedStamp(mixSess.whenIso)},
       experiences:[],mixes:[],notes:[]};
     const intentForStrain=editEntry.intent||null;
     if(editEntry.strainId){setStrains(strains.map(s=>s.id!==editEntry.strainId?s:{...s,intent:intentForStrain||s.intent,cops:[...s.cops,newCop]}));
@@ -4013,6 +4080,30 @@ function MobileShell(){
     if(session.copAgain!=="Never again")setOnHand([{strainName:editEntry.strainName,strainId:strainId,copId:copId,type:editEntry.type,terpenes:[...editEntry.terpenes],date:editEntry.date,dateIso:resolveIso(editEntry),rating:session.rating},...onHand]);
     setCoppedEntries(coppedEntries.filter(e=>e.id!==editEntry.id));
     reset("session");setEditEntry(null);setView(null);
+  };
+
+  // Reverse of handleConfirmDone. Also reopens the re-up if finishing this cop
+  // auto-closed it, otherwise the haul stays closed around a cop that is open again.
+  const handleUnfinishCop=(strainId,copId)=>{
+    const strain=strains.find(s=>s.id===strainId);
+    const cop=strain?.cops.find(c=>c.id===copId);
+    if(!cop)return;
+    setStrains(strains.map(s=>s.id!==strainId?s:{...s,cops:s.cops.map(c=>{
+      if(c.id!==copId)return c;
+      const{finishedDate,...rest}=c;
+      return{...rest,status:"on-hand"};
+    })}));
+    setOnHand(prev=>prev.some(o=>o.copId===copId)?prev:[{strainName:strain.name,strainId,copId,
+      type:cop.type,terpenes:[...(cop.terpenes||[])],date:cop.date,dateIso:cop.dateIso,
+      rating:cop.session?.rating??null,...(cop.lite?{lite:true}:{})},...prev]);
+    const closed=finishedReups.find(r=>(r.copIds||[]).includes(copId));
+    if(closed){
+      const{closed:_c,closedDate:_d,strainNames:_s,...reopened}=closed;
+      setFinishedReups(finishedReups.filter(r=>r.id!==closed.id));
+      setReups(prev=>[...prev,{...reopened,closed:false}]);
+    }
+    setDetailStrain(prev=>prev&&prev.id===strainId?{...prev,cops:prev.cops.map(c=>{
+      if(c.id!==copId)return c;const{finishedDate,...rest}=c;return{...rest,status:"on-hand"};})}:prev);
   };
 
   const handleMarkDone=item=>{setFinishingCop(item);setFinishCopAgain("");};
@@ -4032,35 +4123,58 @@ function MobileShell(){
     setFinishingCop(null);setFinishCopAgain("");
   };
 
+  // Turn a stale "ready to try" into a lite cop: straight to on hand, no first session,
+  // original cop date preserved. Sets cop.lite only -- the re-up keeps its own mode and date,
+  // so this deliberately does NOT go through addLiteCopToReup.
+  const convertCoppedToLite=entry=>{
+    if(!entry||(entry.terpenes?.length||0)<MIN_TERPS)return;
+    const{copId,strainId,newCop,onHandEntry}=makeLiteCop(coppedEntryAsCopForm(entry),entry.reupId);
+    if(entry.strainId){setStrains(strains.map(s=>s.id!==entry.strainId?s:{...s,intent:entry.intent||s.intent||null,cops:[...s.cops,newCop]}));
+    }else{setStrains([{id:strainId,name:entry.strainName,parents:[entry.parent1,entry.parent2].filter(Boolean),intent:entry.intent||null,cops:[newCop]},...strains]);}
+    setReups(settleCoppedId(reups,entry.reupId,entry.id,copId));
+    setOnHand([onHandEntry,...onHand]);
+    setCoppedEntries(coppedEntries.filter(e=>e.id!==entry.id));
+  };
+
+  // Deleting must also strip the id from the re-up, or noPending never goes true
+  // and that haul stays open forever.
+  const deleteCoppedEntry=entry=>{
+    if(!entry)return;
+    if(confirmDeleteItem!=="copped-"+entry.id){setConfirmDeleteItem("copped-"+entry.id);return;}
+    setCoppedEntries(coppedEntries.filter(e=>e.id!==entry.id));
+    if(entry.reupId)setReups(reups.map(r=>r.id!==entry.reupId?r:{...r,coppedIds:(r.coppedIds||[]).filter(id=>id!==entry.id)}));
+    setConfirmDeleteItem(null);
+  };
+
   const setCoppedIntent=(id,intent)=>setCoppedEntries(prev=>prev.map(e=>e.id!==id?e:e.intent?e:{...e,intent}));
   const setCoppedAmount=(id,amount)=>setCoppedEntries(prev=>prev.map(e=>e.id!==id?e:e.amount?e:{...e,amount}));
   const setCoppedTerpenes=(id,terpenes)=>setCoppedEntries(prev=>prev.map(e=>e.id!==id?e:{...e,terpenes:[...terpenes]}));
 
   const toggleStar=()=>{if(!detailStrain)return;const updated=strains.map(s=>s.id!==detailStrain.id?s:{...s,starred:!s.starred});setStrains(updated);setDetailStrain({...detailStrain,starred:!detailStrain.starred});};
 
-  const handleSaveNote=()=>{
+  const handleSaveNote=(whenIso)=>{
     if(!detailStrain||!updateNote.trim())return;
-    const note={id:Date.now(),date:today(),text:updateNote.trim()};
+    const note={id:Date.now(),...datedStamp(whenIso),text:updateNote.trim()};
     const sid=detailStrain.id;const cidx=detailCopIdx;
     setStrains(prev=>{const updated=prev.map(s=>{if(s.id!==sid)return s;const tc=s.cops[cidx];if(!tc)return s;return{...s,cops:s.cops.map(cc=>cc.id!==tc.id?cc:{...cc,notes:[...(cc.notes||[]),note]})};});setDetailStrain(updated.find(s=>s.id===sid));return updated;});
     setUpdateNote("");setMixMode(null);
   };
 
-  const handleInlineNote=(strainId,copId,text)=>{
+  const handleInlineNote=(strainId,copId,text,whenIso)=>{
     if(!text.trim())return;
-    const note={id:Date.now(),date:today(),text:text.trim()};
+    const note={id:Date.now(),...datedStamp(whenIso),text:text.trim()};
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,notes:[...(c.notes||[]),note]})};}));
   };
 
-  const handleInlineExperience=(strainId,copId,text,setting="indoor",bedtime=false,vibeTags=[])=>{
+  const handleInlineExperience=(strainId,copId,text,setting="indoor",bedtime=false,vibeTags=[],whenIso)=>{
     if(!text.trim()&&vibeTags.length===0)return;
-    const exp={id:Date.now(),date:today(),setting,bedtime,note:text.trim(),vibeTags:[...vibeTags],mixedWith:null};
+    const exp={id:Date.now(),...datedStamp(whenIso),setting,bedtime,note:text.trim(),vibeTags:[...vibeTags],mixedWith:null};
     setStrains(prev=>prev.map(s=>{if(s.id!==strainId)return s;return{...s,cops:s.cops.map(c=>c.id!==copId?c:{...c,experiences:[...(c.experiences||[]),exp]})};}));
   };
 
   const handleSaveExperience=()=>{
     if(!detailStrain||(!expNote.note.trim()&&expNote.vibeTags.length===0))return;
-    const exp={id:Date.now(),date:today(),setting:expNote.setting,bedtime:expNote.bedtime,note:expNote.note.trim(),vibeTags:[...expNote.vibeTags],mixedWith:expNote.mixedWith||null};
+    const exp={id:Date.now(),...datedStamp(expNote.whenIso),setting:expNote.setting,bedtime:expNote.bedtime,note:expNote.note.trim(),vibeTags:[...expNote.vibeTags],mixedWith:expNote.mixedWith||null};
     const sid=detailStrain.id;const cidx=detailCopIdx;
     setStrains(prev=>{const updated=prev.map(s=>{if(s.id!==sid)return s;const tc=s.cops[cidx];if(!tc)return s;return{...s,cops:s.cops.map(cc=>cc.id!==tc.id?cc:{...cc,experiences:[...(cc.experiences||[]),exp]})};});setDetailStrain(updated.find(s=>s.id===sid));return updated;});
     setExpNote({note:"",setting:"indoor",bedtime:false,vibeTags:[]});setMixMode(null);
@@ -4116,7 +4230,7 @@ function MobileShell(){
     const ct=[...new Set([...(c.terpenes||[]),...(mwCop?.terpenes||[])])];
     const cTaste=[...new Set([...(c.session?.tasteTags||[]),...(mwCop?.session?.tasteTags||[])])];
     const mixSharedId=Date.now();
-    const me={id:mixSharedId,sharedId:mixSharedId,withStrain:mixWith.name,withStrainId:mixWith.id,primaryStrain:detailStrain.name,primaryStrainId:detailStrain.id,primaryType:c.type,withType:mwCop?.type,status:rateLater?"queued":"reviewed",rating:mixSess.rating,spectrums:{sw:mixSess.sw,sf:mixSess.sf},pull:mixSess.pull,bedtime:mixSess.bedtime,vibeTags:[...mixSess.vibeTags],combinedTerpenes:ct,combinedTaste:cTaste,notes:mixSess.notes,date:today()};
+    const me={id:mixSharedId,sharedId:mixSharedId,withStrain:mixWith.name,withStrainId:mixWith.id,primaryStrain:detailStrain.name,primaryStrainId:detailStrain.id,primaryType:c.type,withType:mwCop?.type,status:rateLater?"queued":"reviewed",rating:mixSess.rating,spectrums:{sw:mixSess.sw,sf:mixSess.sf},pull:mixSess.pull,bedtime:mixSess.bedtime,vibeTags:[...mixSess.vibeTags],combinedTerpenes:ct,combinedTaste:cTaste,notes:mixSess.notes,...datedStamp(mixSess.whenIso)};
     const mirror={...me,id:mixSharedId+1,withStrain:detailStrain.name,withStrainId:detailStrain.id,primaryStrain:mixWith.name,primaryStrainId:mixWith.id,primaryType:mwCop?.type,withType:c.type};
     if(rateLater)setMixQueue(prev=>[{...me,copId:c.id},...prev]);
     const updated=strains.map(s=>{
@@ -4162,9 +4276,9 @@ function MobileShell(){
   const renderPage=()=>{
     switch(page){
       case "home": return <HomePage strains={strains} onHand={onHand} coppedEntries={coppedEntries} mixQueue={mixQueue} finishedReups={finishedReups} onNavigate={navigate} onLogCop={()=>{setPage("stash");setMenuOpen(false);setView("reupPicker");window.scrollTo(0,0);}} onOpenDetail={openDetail} savedComparisons={savedComparisons} savedTips={savedTips}/>;
-      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveLiteCop={handleSaveLiteCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setCoppedTerpenes={setCoppedTerpenes} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
+      case "stash": return <StashPage strains={strains} coppedEntries={coppedEntries} onHand={onHand} mixQueue={mixQueue} reups={reups} finishedReups={finishedReups} view={view} setView={setView} cop={cop} setCop={setCop} session={session} setSession={setSession} editEntry={editEntry} setEditEntry={setEditEntry} activeReupId={activeReupId} setActiveReupId={setActiveReupId} mixSess={mixSess} setMixSess={setMixSess} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleSaveCop={handleSaveCop} handleSaveLiteCop={handleSaveLiteCop} handleSaveSession={handleSaveSession} handleMarkDone={handleMarkDone} handleConfirmDone={handleConfirmDone} handleReviewMix={handleReviewMix} handleSaveMixReview={handleSaveMixReview} setCoppedIntent={setCoppedIntent} setCoppedAmount={setCoppedAmount} setCoppedTerpenes={setCoppedTerpenes} convertToLite={convertCoppedToLite} onDeleteCopped={deleteCoppedEntry} setFinishingCop={setFinishingCop} openDetail={openDetail} openDetailTab={openDetailTab} reset={reset} showSugg={showSugg} setShowSugg={setShowSugg} legacyStrains={legacyStrains} handleAddReup={handleAddReup} handleDeleteReup={handleDeleteReup} confirmDeleteItem={confirmDeleteItem} handleInlineNote={handleInlineNote} handleInlineExperience={handleInlineExperience} onAddMixQueue={handleAddToMixQueue}/>;
       case "library": return <LibraryPage strains={strains} legacyStrains={legacyStrains} onOpenDetail={openDetail} onPeek={s=>setPeekStrain(s)}/>;
-      case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} setCopIdx={setDetailCopIdx} onRateMix={rateLoggedMix} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
+      case "detail": return <StrainDetailPage strain={detailStrain} copIdx={detailCopIdx} setCopIdx={setDetailCopIdx} onUnfinish={handleUnfinishCop} onRateMix={rateLoggedMix} tab={detailTab} setTab={setDetailTab} onBack={()=>{setPage(detailOrigin);setDetailStrain(null);}} onStar={toggleStar} onUpdateRating={handleUpdateRating} onUpdateParents={handleUpdateParents} updateNote={updateNote} setUpdateNote={setUpdateNote} onSaveNote={handleSaveNote} mixMode={mixMode} setMixMode={setMixMode} expNote={expNote} setExpNote={setExpNote} onSaveExperience={handleSaveExperience} onHand={onHand} strains={strains} onMarkDone={handleMarkDone} finishingCop={finishingCop} finishCopAgain={finishCopAgain} setFinishCopAgain={setFinishCopAgain} handleConfirmDone={handleConfirmDone} setFinishingCop={setFinishingCop} deleteFromCop={deleteFromCop} editNoteText={editNoteText} editingItem={editingItem} setEditingItem={setEditingItem} editText={editText} setEditText={setEditText} confirmDeleteItem={confirmDeleteItem} handleCreateMix={handleCreateMix} mixWith={mixWith} setMixWith={setMixWith} mixSess={mixSess} setMixSess={setMixSess}/>;
       case "insights": return <InsightsPage strains={strains} onHand={onHand} onPeek={s=>setPeekStrain(s)} dismissed={insightsDismissed} setDismissed={setInsightsDismissed} saved={insightsSaved} setSaved={setInsightsSaved}/>;
       case "compare": return <ComparePage strains={strains} reups={[...reups,...finishedReups]} savedComparisons={savedComparisons} onSaveComparison={c=>{setSavedComparisons(prev=>[c,...prev]);}} onDeleteComparison={id=>setSavedComparisons(prev=>prev.filter(c=>c.id!==id))} onPeek={s=>setPeekStrain(s)}/>;
       case "recommender": return <RecommenderPage strains={strains} reups={[...reups,...finishedReups]} savedTips={savedTips} onSaveTip={t=>setSavedTips(prev=>[t,...prev])} onDeleteTip={id=>setSavedTips(prev=>prev.filter(t=>t.id!==id))} onPeek={s=>setPeekStrain(s)}/>;
