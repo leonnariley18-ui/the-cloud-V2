@@ -3857,12 +3857,10 @@ function DesktopShell(){
     setOnHand(prev=>prev.some(o=>o.copId===copId)?prev:[{strainName:strain.name,strainId,copId,
       type:cop.type,terpenes:[...(cop.terpenes||[])],date:cop.date,dateIso:cop.dateIso,
       rating:cop.session?.rating??null,...(cop.lite?{lite:true}:{})},...prev]);
-    const closed=finishedReups.find(r=>(r.copIds||[]).includes(copId));
-    if(closed){
-      const{closed:_c,closedDate:_d,strainNames:_s,...reopened}=closed;
-      setFinishedReups(finishedReups.filter(r=>r.id!==closed.id));
-      setReups(prev=>[...prev,{...reopened,closed:false}]);
-    }
+    // The re-up deliberately stays closed. Reopening it would push past the
+    // two-open-re-ups cap, which is only enforced on the create path, and would
+    // make a finished haul a target for new cops again. Un-finishing is about
+    // this cop, not about reopening the haul it came in.
   };
 
   const handleFinishCop=(item,copAgainChoice)=>{
@@ -4096,12 +4094,10 @@ function MobileShell(){
     setOnHand(prev=>prev.some(o=>o.copId===copId)?prev:[{strainName:strain.name,strainId,copId,
       type:cop.type,terpenes:[...(cop.terpenes||[])],date:cop.date,dateIso:cop.dateIso,
       rating:cop.session?.rating??null,...(cop.lite?{lite:true}:{})},...prev]);
-    const closed=finishedReups.find(r=>(r.copIds||[]).includes(copId));
-    if(closed){
-      const{closed:_c,closedDate:_d,strainNames:_s,...reopened}=closed;
-      setFinishedReups(finishedReups.filter(r=>r.id!==closed.id));
-      setReups(prev=>[...prev,{...reopened,closed:false}]);
-    }
+    // The re-up deliberately stays closed. Reopening it would push past the
+    // two-open-re-ups cap, which is only enforced on the create path, and would
+    // make a finished haul a target for new cops again. Un-finishing is about
+    // this cop, not about reopening the haul it came in.
     setDetailStrain(prev=>prev&&prev.id===strainId?{...prev,cops:prev.cops.map(c=>{
       if(c.id!==copId)return c;const{finishedDate,...rest}=c;return{...rest,status:"on-hand"};})}:prev);
   };
