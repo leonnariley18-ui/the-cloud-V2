@@ -141,6 +141,22 @@ function settleCoppedId(reups,reupId,coppedId,copId){
     copIds:[...(r.copIds||[]),copId]});
 }
 
+// A haul closes when every cop in it is done and nothing is still waiting on review.
+// Finishing a cop can make that true -- and so can deleting the last ready-to-try entry --
+// so the check lives here instead of inside whichever handler happened to notice first.
+// Returns the next {finished, open} lists, or null if the haul isn't done yet.
+function closeReupIfComplete(reup,strains,openReups,finishedReups){
+  if(!reup||!(reup.copIds||[]).length)return null;        // an empty haul gets deleted, not closed
+  if((reup.coppedIds||[]).length)return null;             // still waiting on a first session
+  const allCops=strains.flatMap(s=>s.cops||[]);
+  if(!reup.copIds.every(cId=>allCops.find(c=>c.id===cId)?.status==="done"))return null;
+  const assigned=[...finishedReups,...openReups].map(r=>r.number||0);
+  const nextNum=reup.number||(assigned.length>0?Math.max(...assigned)+1:HISTORICAL_REUPS.length+1);
+  const fr={...reup,closed:true,closedDate:today(),number:nextNum,
+    strainNames:reup.copIds.map(cId=>strains.find(st=>(st.cops||[]).some(c=>c.id===cId))?.name).filter(Boolean)};
+  return{finished:[fr,...finishedReups],open:openReups.filter(r=>r.id!==reup.id)};
+}
+
 function addLiteCopToReup(reups,reupId,copId,copDate,copIso){
   return reups.map(r=>{
     if(r.id!==reupId)return r;
@@ -3867,18 +3883,8 @@ function DesktopShell(){
     const newOnHand=onHand.filter(o=>o.copId!==item.copId);
     const newStrains=strains.map(s=>s.id!==item.strainId?s:{...s,cops:s.cops.map(c=>c.id!==item.copId?c:{...c,status:"done",finishedDate:today(),session:{...c.session,copAgain:copAgainChoice||c.session?.copAgain}})});
     setOnHand(newOnHand);setStrains(newStrains);
-    const reupForCop=reups.find(r=>r.copIds.includes(item.copId));
-    if(reupForCop){
-      const allDone=reupForCop.copIds.every(cId=>{const c=newStrains.flatMap(s=>s.cops).find(cc=>cc.id===cId);return c?.status==="done";});
-      const noPending=(reupForCop.coppedIds||[]).length===0;
-      if(allDone&&noPending){
-        const fr={...reupForCop,closed:true,closedDate:today(),strainNames:reupForCop.copIds.map(cId=>{const strain=newStrains.find(s=>s.cops.some(c=>c.id===cId));return strain?.name;}).filter(Boolean)};
-        const allAssignedNumbers=[...finishedReups,...reups].map(r=>r.number||0);
-        const nextNum=reupForCop.number||(allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1);
-        setFinishedReups([{...fr,number:nextNum},...finishedReups]);
-        setReups(reups.filter(r=>r.id!==reupForCop.id));
-      }
-    }
+    const closed=closeReupIfComplete(reups.find(r=>r.copIds.includes(item.copId)),newStrains,reups,finishedReups);
+    if(closed){setFinishedReups(closed.finished);setReups(closed.open);}
   };
 
   const handleCreateMix=(strain,cop,mixWith,mixSess,rateLater)=>{
@@ -4108,14 +4114,8 @@ function MobileShell(){
     const newOnHand=onHand.filter(o=>o.copId!==fc.copId);
     const newStrains=strains.map(s=>s.id!==fc.strainId?s:{...s,cops:s.cops.map(c=>c.id!==fc.copId?c:{...c,status:"done",finishedDate:today(),session:{...c.session,copAgain:finishCopAgain||c.session?.copAgain}})});
     setOnHand(newOnHand);setStrains(newStrains);
-    const reupForCop=reups.find(r=>r.copIds.includes(fc.copId));
-    if(reupForCop){const allDone=reupForCop.copIds.every(cId=>{const c=newStrains.flatMap(s=>s.cops).find(cc=>cc.id===cId);return c?.status==="done";});
-      const noPending=(reupForCop.coppedIds||[]).length===0;
-      if(allDone&&noPending){const fr={...reupForCop,closed:true,closedDate:today(),strainNames:reupForCop.copIds.map(cId=>{const strain=newStrains.find(s=>s.cops.some(c=>c.id===cId));return strain?.name;}).filter(Boolean)};
-        const allAssignedNumbers=[...finishedReups,...reups].map(r=>r.number||0);
-        const nextNum=reupForCop.number||(allAssignedNumbers.length>0?Math.max(...allAssignedNumbers)+1:HISTORICAL_REUPS.length+1);
-        setFinishedReups([{...fr,number:nextNum},...finishedReups]);setReups(reups.filter(r=>r.id!==reupForCop.id));
-      }}
+    const closed=closeReupIfComplete(reups.find(r=>r.copIds.includes(fc.copId)),newStrains,reups,finishedReups);
+    if(closed){setFinishedReups(closed.finished);setReups(closed.open);}
     setFinishingCop(null);setFinishCopAgain("");
   };
 
@@ -4138,7 +4138,13 @@ function MobileShell(){
     if(!entry)return;
     if(confirmDeleteItem!=="copped-"+entry.id){setConfirmDeleteItem("copped-"+entry.id);return;}
     setCoppedEntries(coppedEntries.filter(e=>e.id!==entry.id));
-    if(entry.reupId)setReups(reups.map(r=>r.id!==entry.reupId?r:{...r,coppedIds:(r.coppedIds||[]).filter(id=>id!==entry.id)}));
+    if(entry.reupId){
+      const nextReups=reups.map(r=>r.id!==entry.reupId?r:{...r,coppedIds:(r.coppedIds||[]).filter(id=>id!==entry.id)});
+      // Dropping the last pending entry can be the thing that completes the haul.
+      const closed=closeReupIfComplete(nextReups.find(r=>r.id===entry.reupId),strains,nextReups,finishedReups);
+      if(closed){setFinishedReups(closed.finished);setReups(closed.open);}
+      else setReups(nextReups);
+    }
     setConfirmDeleteItem(null);
   };
 
