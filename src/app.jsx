@@ -166,11 +166,20 @@ function addLiteCopToReup(reups,reupId,copId,copDate,copIso){
   });
 }
 
+// Numbers 1..HISTORICAL_REUPS.length belong to the V1 hauls -- settled history that must never
+// be renumbered. Everything above is stripped and recounted so deleting a re-up leaves no gap.
+const stripRenumberable=list=>[...list]
+  .sort((a,b)=>(a.number||0)-(b.number||0))
+  .map(r=>r.number&&r.number<=HISTORICAL_REUPS.length?r:(({number,...rest})=>rest)(r));
+
 function assignReupNumbers(finished,active){
   let nextNum=HISTORICAL_REUPS.length+1;
   const numberedFinished=finished.map(r=>{
     if(r.number)return r;
-    const histIdx=HISTORICAL_REUPS.findIndex(h=>h.date===r.date&&h.strainNames.some(n=>r.strainNames?.includes(n)));
+    // Match on the full ISO date, not the year-less display string: "Jun 2" alone would let a
+    // future haul collide with V1 history. backfillIso pins pre-dateIso records to LEGACY_DATA_YEAR,
+    // which is the year HISTORICAL_REUPS is from, so both sides resolve to the same ISO day.
+    const histIdx=HISTORICAL_REUPS.findIndex(h=>isoOf(h.date,LEGACY_DATA_YEAR)===resolveIso(r)&&h.strainNames.some(n=>r.strainNames?.includes(n)));
     return histIdx>=0?{...r,number:histIdx+1}:{...r,number:nextNum++};
   }).sort((a,b)=>a.number-b.number);
   const numberedActive=active.map(r=>r.number?r:{...r,number:nextNum++});
@@ -2395,8 +2404,8 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
     if((target.copIds||[]).length!==0||(target.coppedIds||[]).length!==0)return;
     if(confirmDeleteReup!==reupId){setConfirmDeleteReup(reupId);return;}
     const remainingActive=openReups.filter(r=>r.id!==reupId);
-    const sortedFinished=[...finishedReups].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
-    const sortedActive=[...remainingActive].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
+    const sortedFinished=stripRenumberable(finishedReups);
+    const sortedActive=stripRenumberable(remainingActive);
     const{finished:renumberedFinished,active:renumberedActive}=assignReupNumbers(sortedFinished,sortedActive);
     setFinishedReups(renumberedFinished);
     setReups(renumberedActive);
@@ -2686,8 +2695,8 @@ function StashSidebar({stashOpen,setStashOpen,strains,onHand,coppedEntries,finis
    STRAIN DETAIL WINDOW (Desktop)
    ═══════════════════════════════════════════ */
 function StrainDetailWindow({selectedStrain,detailTab:detailTabProp,setDetailTab,onClose,strains,onHand,onRateMix,onUnfinish,onAddNote,onEditNote,onDeleteNote,onAddExperience,onFinishCop,onCreateMix}){
-  if(!selectedStrain)return null;
-
+  // No early return before the hooks below -- the parent renders this only when selectedStrain
+  // exists, and keys it by strain id so the cop index resets on switch.
   const liveStrain=strains.find(s=>s.id===selectedStrain.id)||null;
   const isReal=!!liveStrain;
   const strain=liveStrain||selectedStrain;
@@ -4041,8 +4050,8 @@ function MobileShell(){
     if(!isEmpty)return;
     if(confirmDeleteItem!=="reup-"+reupId){setConfirmDeleteItem("reup-"+reupId);return;}
     const remainingActive=reups.filter(r=>r.id!==reupId);
-    const sortedFinished=[...finishedReups].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
-    const sortedActive=[...remainingActive].sort((a,b)=>(a.number||0)-(b.number||0)).map(({number,...rest})=>rest);
+    const sortedFinished=stripRenumberable(finishedReups);
+    const sortedActive=stripRenumberable(remainingActive);
     const{finished:renumberedFinished,active:renumberedActive}=assignReupNumbers(sortedFinished,sortedActive);
     setFinishedReups(renumberedFinished);
     setReups(renumberedActive);
