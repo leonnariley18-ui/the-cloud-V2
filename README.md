@@ -16,7 +16,7 @@ Built for one user, on purpose. There's no auth, no multi-tenancy, and no attemp
 | **Styling** | Inline styles. No CSS framework, no CSS files |
 | **Backend** | Supabase — a single `cloud_data` row holding one JSONB blob |
 | **Auth** | None. Publishable key + a hardcoded `USER_ID` + an RLS policy that allows exactly that row |
-| **Hosting** | GitHub Pages, served from `/docs` on `claude/cannabis-tracking-app-rebuild` |
+| **Hosting** | GitHub Pages, served from `/docs` on `main` |
 | **PWA** | Manifest + service worker, installable to a phone home screen |
 
 ### Why one file
@@ -202,15 +202,16 @@ npm run build        # → /docs
 
 ### Deploying
 
-**Pages serves `/docs` from `claude/cannabis-tracking-app-rebuild`, not `main`.** Merging a PR into `main` does not deploy anything. After a merge, fast-forward the deploy branch:
+**Pages serves `/docs` from `main`.** Merging a PR is the deploy — there's no separate step.
+
+That makes the build part of the change: **rebuild `/docs` in the same commit as the source change.** `main/docs` is what's live, so merging source without a fresh build ships stale JS against fresh source.
 
 ```bash
-git push origin main:claude/cannabis-tracking-app-rebuild
+npm run build        # → /docs
+git add -A && git commit
 ```
 
-To make merging deploy on its own, point Pages at `main` `/docs` in repo settings and delete the step above.
-
-Build `/docs` in the same commit as the source change, or the deploy branch ships stale JS against fresh source. Hard-reload after deploying — the service worker will otherwise hand you the previous bundle.
+Hard-reload after deploying — the service worker will otherwise hand you the previous bundle.
 
 `vite.config.js` builds to `docs/` rather than `dist/` specifically so the source `index.html` at the repo root is never overwritten.
 
