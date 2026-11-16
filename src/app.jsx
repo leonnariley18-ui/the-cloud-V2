@@ -130,7 +130,7 @@ function coppedEntryAsCopForm(entry){
   return{name:entry.strainName,existingStrainId:entry.strainId,type:entry.type,lean:entry.lean,
     source:entry.source,container:entry.container,brand:entry.brand,growType:entry.growType,
     terpenes:entry.terpenes||[],notes:entry.firstNotes,intent:entry.intent,amount:entry.amount,
-    parent1:entry.parent1,parent2:entry.parent2,unknownLineage:false,
+    parent1:entry.parent1,parent2:entry.parent2,parent3:entry.parent3,unknownLineage:false,
     copDate:entry.dateIso||inferIso(entry.date)||null};
 }
 // Moves a pending id to settled on its re-up -- the same move handleSaveSession makes.
@@ -480,7 +480,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
   const nameSuggs=[];
   const legacySuggs=[];
 
-  const handleSelectExisting=strain=>{setCop({...cop,name:strain.name,type:getLatestCop(strain).type||"",lean:getLatestCop(strain).lean||"",parent1:strain.parents?.[0]||"",parent2:strain.parents?.[1]||"",existingStrainId:strain.id});setNameInput(strain.name);setShowSugg(false);};
+  const handleSelectExisting=strain=>{setCop({...cop,name:strain.name,type:getLatestCop(strain).type||"",lean:getLatestCop(strain).lean||"",parent1:strain.parents?.[0]||"",parent2:strain.parents?.[1]||"",parent3:strain.parents?.[2]||"",existingStrainId:strain.id});setNameInput(strain.name);setShowSugg(false);};
 
   const[inlineCard,setInlineCard]=useState(null);
   const[terpFixId,setTerpFixId]=useState(null);   // keeps the terpene fixer open past the first pick
@@ -565,7 +565,7 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
         onBlur={name=>setCop({...cop,name,existingStrainId:null})}
         onSelect={s=>{
           if(s.legacy){setCop({...cop,name:s.name,type:s.type||cop.type});}
-          else{const lc=s.cops[s.cops.length-1];setCop({...cop,name:s.name,type:lc.type||"",lean:lc.lean||"",parent1:s.parents?.[0]||"",parent2:s.parents?.[1]||"",existingStrainId:s.id});}
+          else{const lc=s.cops[s.cops.length-1];setCop({...cop,name:s.name,type:lc.type||"",lean:lc.lean||"",parent1:s.parents?.[0]||"",parent2:s.parents?.[1]||"",parent3:s.parents?.[2]||"",existingStrainId:s.id});}
         }}
       />
       {cop.existingStrainId&&<p style={{fontSize:11,color:P.sage,margin:"0 0 16px"}}>✓ new cop of existing strain</p>}
@@ -591,8 +591,12 @@ function StashPage({strains,coppedEntries,onHand,mixQueue,reups,finishedReups,
               <input defaultValue={cop.parent2} onBlur={e=>setCop({...cop,parent2:e.target.value})} placeholder="parent 2" style={{flex:1,background:"rgba(240,235,225,0.06)",borderRadius:8,padding:"10px 14px",fontSize:14,color:"#F0EBE1",border:"0.5px solid rgba(240,235,225,0.1)",fontFamily:"inherit",outline:"none"}}/>
               <button onClick={()=>setCop({...cop,parent2:cop.parent2==="unknown"?"":"unknown"})} style={{fontSize:10,padding:"4px 8px",borderRadius:8,background:cop.parent2==="unknown"?"rgba(240,235,225,0.15)":"transparent",color:cop.parent2==="unknown"?"#F0EBE1":"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>unknown</button>
             </div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <input defaultValue={cop.parent3} onBlur={e=>setCop({...cop,parent3:e.target.value})} placeholder="parent 3 (if it's a three-way)" style={{flex:1,background:"rgba(240,235,225,0.06)",borderRadius:8,padding:"10px 14px",fontSize:14,color:"#F0EBE1",border:"0.5px solid rgba(240,235,225,0.1)",fontFamily:"inherit",outline:"none"}}/>
+              <button onClick={()=>setCop({...cop,parent3:cop.parent3==="unknown"?"":"unknown"})} style={{fontSize:10,padding:"4px 8px",borderRadius:8,background:cop.parent3==="unknown"?"rgba(240,235,225,0.15)":"transparent",color:cop.parent3==="unknown"?"#F0EBE1":"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>unknown</button>
+            </div>
           </div>}
-        <button onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:""})} style={{fontSize:11,padding:"4px 12px",borderRadius:8,background:cop.unknownLineage?"rgba(240,235,225,0.15)":"transparent",color:cop.unknownLineage?"#F0EBE1":"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit",marginBottom:20}}>unknown lineage{cop.unknownLineage?" ✓":""}</button>
+        <button onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:"",parent3:""})} style={{fontSize:11,padding:"4px 12px",borderRadius:8,background:cop.unknownLineage?"rgba(240,235,225,0.15)":"transparent",color:cop.unknownLineage?"#F0EBE1":"rgba(240,235,225,0.4)",border:"0.5px solid rgba(240,235,225,0.15)",cursor:"pointer",fontFamily:"inherit",marginBottom:20}}>unknown lineage{cop.unknownLineage?" ✓":""}</button>
       </>}
       {(()=>{const ready=cop.name.trim()&&cop.terpenes.length>=MIN_TERPS;return(<>
         <button onClick={()=>ready&&(isLite?handleSaveLiteCop():handleSaveCop())} disabled={!ready} style={{width:"100%",padding:14,borderRadius:10,fontSize:15,fontWeight:500,background:ready?P.terracotta:"rgba(240,235,225,0.08)",color:ready?P.cream:"rgba(240,235,225,0.3)",border:"none",cursor:ready?"pointer":"default",fontFamily:"inherit"}}>{isLite?"add to lite re-up":"save cop"}</button>
@@ -880,6 +884,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,onUnfinish,tab:tabP
   const[editingParents,setEditingParents]=useState(false);
   const[p1,setP1]=useState("");
   const[p2,setP2]=useState("");
+  const[p3,setP3]=useState("");
   const[unknownLineage,setUnknownLineage]=useState(false);
   const cop=strain?.cops?.[copIdx];
   // reads tabProp, not the derived `tab` below — a dep array is evaluated during
@@ -919,7 +924,7 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,onUnfinish,tab:tabP
       <button onClick={onBack} style={{width:36,height:36,borderRadius:"50%",background:typeTheme.cardBg,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10 1L1 10M1 10h6M1 10V4" stroke={typeTheme.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
       <div style={{flex:1}}>
         <h2 style={{fontSize:22,fontWeight:500,margin:0,fontFamily:"'Playfair Display',serif"}}>{strain.name}</h2>
-        {!editingParents&&<p onClick={canEditParents?()=>{setP1(strain.parents?.[0]||"");setP2(strain.parents?.[1]||"");setUnknownLineage(strain.parents?.includes("unknown lineage")||false);setEditingParents(true);}:undefined} style={{fontSize:12,color:typeTheme.muted,margin:"2px 0 0",cursor:canEditParents?"pointer":"default"}}>
+        {!editingParents&&<p onClick={canEditParents?()=>{setP1(strain.parents?.[0]||"");setP2(strain.parents?.[1]||"");setP3(strain.parents?.[2]||"");setUnknownLineage(strain.parents?.includes("unknown lineage")||false);setEditingParents(true);}:undefined} style={{fontSize:12,color:typeTheme.muted,margin:"2px 0 0",cursor:canEditParents?"pointer":"default"}}>
           {strain.parents?.length>0?strain.parents.join(" x "):<span style={{opacity:0.4}}>{canEditParents?"tap to add parents":""}</span>}
           {canEditParents&&<span style={{fontSize:10,opacity:0.3,marginLeft:6}}>✎</span>}
         </p>}
@@ -927,13 +932,14 @@ function StrainDetailPage({strain,copIdx,setCopIdx,onRateMix,onUnfinish,tab:tabP
           {!unknownLineage&&<div style={{display:"flex",gap:6,marginBottom:6}}>
             <input defaultValue={p1} onBlur={e=>setP1(e.target.value)} placeholder="parent 1" style={{flex:1,background:typeTheme.cardBg,borderRadius:6,padding:"6px 10px",fontSize:12,color:typeTheme.text,border:`0.5px solid ${typeTheme.accent}40`,fontFamily:"inherit",outline:"none"}}/>
             <input defaultValue={p2} onBlur={e=>setP2(e.target.value)} placeholder="parent 2" style={{flex:1,background:typeTheme.cardBg,borderRadius:6,padding:"6px 10px",fontSize:12,color:typeTheme.text,border:`0.5px solid ${typeTheme.accent}40`,fontFamily:"inherit",outline:"none"}}/>
+            <input defaultValue={p3} onBlur={e=>setP3(e.target.value)} placeholder="parent 3" style={{flex:1,background:typeTheme.cardBg,borderRadius:6,padding:"6px 10px",fontSize:12,color:typeTheme.text,border:`0.5px solid ${typeTheme.accent}40`,fontFamily:"inherit",outline:"none"}}/>
           </div>}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
             <button onClick={()=>setUnknownLineage(!unknownLineage)} style={{fontSize:11,padding:"3px 10px",borderRadius:8,background:unknownLineage?`${typeTheme.accent}30`:"transparent",color:unknownLineage?typeTheme.accent:typeTheme.muted,border:`0.5px solid ${typeTheme.accent}30`,cursor:"pointer",fontFamily:"inherit"}}>unknown lineage</button>
           </div>
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>setEditingParents(false)} style={{fontSize:11,padding:"4px 10px",borderRadius:8,background:"transparent",color:typeTheme.muted,border:`0.5px solid ${typeTheme.cardBorder}`,cursor:"pointer",fontFamily:"inherit"}}>cancel</button>
-            <button onClick={()=>{const parents=unknownLineage?["unknown lineage"]:[p1,p2].filter(x=>x.trim());onUpdateParents(strain.id,parents);setEditingParents(false);}} style={{fontSize:11,padding:"4px 12px",borderRadius:8,background:typeTheme.accent,color:cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>save</button>
+            <button onClick={()=>{const parents=unknownLineage?["unknown lineage"]:[p1,p2,p3].filter(x=>x.trim());onUpdateParents(strain.id,parents);setEditingParents(false);}} style={{fontSize:11,padding:"4px 12px",borderRadius:8,background:typeTheme.accent,color:cop?.type==="Sativa"?"#FBF4E4":"#E8E0D4",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:500}}>save</button>
           </div>
         </div>}
       </div>
@@ -2379,10 +2385,10 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
 
   const[formOpen,setFormOpen]=useState(!hasSaved);
   const[activeReupId,setActiveReupId]=useState(openReups[0]?.id||null);
-  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
+  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",parent3:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
   const[showSugg,setShowSugg]=useState(false);
 
-  const resetCop=()=>setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
+  const resetCop=()=>setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",parent3:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
 
   const handleAddReup=(lite=false)=>{
     if(openReups.length>=2)return;
@@ -2416,7 +2422,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
   const handleSaveCop=()=>{
     if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const newId=Date.now();
-    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
+    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,parent3:cop.parent3,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(openReups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
     resetCop();
     setFormOpen(false);
@@ -2427,7 +2433,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
     if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
-    }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
+    }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2,cop.parent3].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
     if(activeReupId)setReups(addLiteCopToReup(openReups,activeReupId,copId,copDate,copIso));
     setOnHand([onHandEntry,...onHand]);
     resetCop();
@@ -2514,7 +2520,7 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
                       onBlur={name=>setCop({...cop,name,existingStrainId:null})}
                       onSelect={s=>{
                         if(s.legacy){setCop({...cop,name:s.name,type:s.type||cop.type});}
-                        else{const lc=s.cops[s.cops.length-1];setCop({...cop,name:s.name,type:lc.type||"",lean:lc.lean||"",parent1:s.parents?.[0]||"",parent2:s.parents?.[1]||"",existingStrainId:s.id});}
+                        else{const lc=s.cops[s.cops.length-1];setCop({...cop,name:s.name,type:lc.type||"",lean:lc.lean||"",parent1:s.parents?.[0]||"",parent2:s.parents?.[1]||"",parent3:s.parents?.[2]||"",existingStrainId:s.id});}
                       }}
                     />
                   </div>
@@ -2569,7 +2575,10 @@ function DesktopHomePage({strains,setStrains,legacyStrains,onHand,setOnHand,copp
                     <input value={cop.parent1} onChange={e=>setCop({...cop,parent1:e.target.value})} placeholder="parent 1" style={{...FIELD_BOX,flex:1,marginBottom:0,outline:"none",fontFamily:"inherit"}}/>
                     <input value={cop.parent2} onChange={e=>setCop({...cop,parent2:e.target.value})} placeholder="parent 2" style={{...FIELD_BOX,flex:1,marginBottom:0,outline:"none",fontFamily:"inherit"}}/>
                   </div>}
-                  <span onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:""})} style={{...(cop.unknownLineage?PILL_ON:PILL_OFF),fontSize:10}}>unknown lineage{cop.unknownLineage?" ✓":""}</span>
+                  {!cop.unknownLineage&&<div style={{display:"flex",gap:8,marginBottom:8}}>
+                    <input value={cop.parent3} onChange={e=>setCop({...cop,parent3:e.target.value})} placeholder="parent 3 (if it's a three-way)" style={{...FIELD_BOX,flex:1,marginBottom:0,outline:"none",fontFamily:"inherit"}}/>
+                  </div>}
+                  <span onClick={()=>setCop({...cop,unknownLineage:!cop.unknownLineage,parent1:"",parent2:"",parent3:""})} style={{...(cop.unknownLineage?PILL_ON:PILL_OFF),fontSize:10}}>unknown lineage{cop.unknownLineage?" ✓":""}</span>
                 </div>
               )}
               <div style={{display:"flex",justifyContent:"flex-end",marginTop:16,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)"}}>
@@ -4008,7 +4017,7 @@ function MobileShell(){
 
   // ── UI state ──
   const[view,setView]=useState(null);
-  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
+  const[cop,setCop]=useState({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",parent3:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
   const[showSugg,setShowSugg]=useState(false);
   const[editEntry,setEditEntry]=useState(null);
   const[session,setSession]=useState({rating:0,smokesLike:"",smokesLikeLean:"",sw:0,sf:0,pull:0,setting:"indoor",bedtime:false,tasteTags:[],vibeTags:[],notes:"",copAgain:""});
@@ -4033,7 +4042,7 @@ function MobileShell(){
   const getLatestCop=s=>s.cops[s.cops.length-1];
   const isNeverAgain=s=>s.cops.some(c=>c.session?.copAgain==="Never again");
   const reset=what=>{
-    if(what==="cop")setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
+    if(what==="cop")setCop({name:"",type:"",lean:"",source:"",container:"",brand:"",growType:"",terpenes:[],parent1:"",parent2:"",parent3:"",unknownLineage:false,notes:"",existingStrainId:null,intent:"",amount:"",copDate:""});
     if(what==="session")setSession({rating:0,smokesLike:"",smokesLikeLean:"",sw:0,sf:0,pull:0,setting:"indoor",bedtime:false,tasteTags:[],vibeTags:[],notes:"",copAgain:""});
     if(what==="mix")setMixSess({rating:0,sw:0,sf:0,pull:0,bedtime:false,vibeTags:[],notes:""});
   };
@@ -4063,7 +4072,7 @@ function MobileShell(){
   const handleSaveCop=()=>{
     if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const newId=Date.now();
-    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
+    setCoppedEntries([{id:newId,strainName:cop.name.trim(),strainId:cop.existingStrainId,reupId:activeReupId,type:cop.type,lean:cop.lean,source:cop.source,container:cop.container,brand:cop.brand,growType:cop.growType,terpenes:[...cop.terpenes],parent1:cop.parent1,parent2:cop.parent2,parent3:cop.parent3,...stamp(),firstNotes:cop.notes,intent:cop.intent||null,amount:cop.amount||null},...coppedEntries]);
     if(activeReupId)setReups(reups.map(r=>r.id!==activeReupId?r:{...r,coppedIds:[...(r.coppedIds||[]),newId]}));
     reset("cop");setActiveReupId(null);setView(null);
   };
@@ -4074,7 +4083,7 @@ function MobileShell(){
     if(!cop.name.trim()||cop.terpenes.length<MIN_TERPS)return;
     const{copId,strainId,newCop,onHandEntry,copDate,copIso}=makeLiteCop(cop,activeReupId);
     if(cop.existingStrainId){setStrains(strains.map(s=>s.id!==cop.existingStrainId?s:{...s,intent:cop.intent||s.intent||null,cops:[...s.cops,newCop]}));
-    }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
+    }else{setStrains([{id:strainId,name:cop.name.trim(),parents:cop.unknownLineage?["unknown lineage"]:[cop.parent1,cop.parent2,cop.parent3].filter(Boolean),intent:cop.intent||null,cops:[newCop]},...strains]);}
     if(activeReupId)setReups(addLiteCopToReup(reups,activeReupId,copId,copDate,copIso));
     setOnHand([onHandEntry,...onHand]);
     reset("cop");
@@ -4088,7 +4097,7 @@ function MobileShell(){
       experiences:[],mixes:[],notes:[]};
     const intentForStrain=editEntry.intent||null;
     if(editEntry.strainId){setStrains(strains.map(s=>s.id!==editEntry.strainId?s:{...s,intent:intentForStrain||s.intent,cops:[...s.cops,newCop]}));
-    }else{setStrains([{id:strainId,name:editEntry.strainName,parents:editEntry.unknownLineage?["unknown lineage"]:[editEntry.parent1,editEntry.parent2].filter(Boolean),intent:intentForStrain,cops:[newCop]},...strains]);}
+    }else{setStrains([{id:strainId,name:editEntry.strainName,parents:editEntry.unknownLineage?["unknown lineage"]:[editEntry.parent1,editEntry.parent2,editEntry.parent3].filter(Boolean),intent:intentForStrain,cops:[newCop]},...strains]);}
     if(editEntry.reupId)setReups(reups.map(r=>r.id!==editEntry.reupId?r:{...r,coppedIds:(r.coppedIds||[]).filter(id=>id!==editEntry.id),copIds:[...r.copIds,copId]}));
     if(session.copAgain!=="Never again")setOnHand([{strainName:editEntry.strainName,strainId:strainId,copId:copId,type:editEntry.type,terpenes:[...editEntry.terpenes],date:editEntry.date,dateIso:resolveIso(editEntry),rating:session.rating},...onHand]);
     setCoppedEntries(coppedEntries.filter(e=>e.id!==editEntry.id));
@@ -4135,7 +4144,7 @@ function MobileShell(){
     if(!entry||(entry.terpenes?.length||0)<MIN_TERPS)return;
     const{copId,strainId,newCop,onHandEntry}=makeLiteCop(coppedEntryAsCopForm(entry),entry.reupId);
     if(entry.strainId){setStrains(strains.map(s=>s.id!==entry.strainId?s:{...s,intent:entry.intent||s.intent||null,cops:[...s.cops,newCop]}));
-    }else{setStrains([{id:strainId,name:entry.strainName,parents:[entry.parent1,entry.parent2].filter(Boolean),intent:entry.intent||null,cops:[newCop]},...strains]);}
+    }else{setStrains([{id:strainId,name:entry.strainName,parents:[entry.parent1,entry.parent2,entry.parent3].filter(Boolean),intent:entry.intent||null,cops:[newCop]},...strains]);}
     setReups(settleCoppedId(reups,entry.reupId,entry.id,copId));
     setOnHand([onHandEntry,...onHand]);
     setCoppedEntries(coppedEntries.filter(e=>e.id!==entry.id));
