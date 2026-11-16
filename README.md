@@ -62,7 +62,8 @@ The permanent record. One entry per strain, holding every time you've copped it.
 
 ```js
 {
-  id, name, parents: [], intent, starred,
+  id, name, parents: [],   // up to three; ["unknown lineage"] replaces the list
+  intent, starred,
   cops: [{
     id, type, lean, source, container, brand, growType, terpenes: [],
     date, dateIso, firstNotes, status: "on-hand" | "done", finishedDate,
@@ -82,6 +83,8 @@ The permanent record. One entry per strain, holding every time you've copped it.
 
 ### `coppedEntries[]`
 The waiting room. A cop that's been logged but not yet reviewed — surfaced as "ready to try". `handleSaveSession` promotes one into a real `cops[]` entry and deletes it from here.
+
+A ready-to-try entry carries the new strain's `parent1`/`parent2`/`parent3` until the strain exists, so a field added to the new-strain form has to be threaded through **four** places: the cop form, the entry it writes, `coppedEntryAsCopForm`, and every `parents:` array built from it (first session, convert-to-lite, lite cop). The detail page's parent editor saves the whole array back, so it has to know about every parent too, or one tap drops the last.
 
 ### `onHand[]`
 A denormalized index of what you currently have, so the stash doesn't have to walk every strain. Keyed by `copId`.
